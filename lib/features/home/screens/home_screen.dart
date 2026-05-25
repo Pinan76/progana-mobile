@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../quinielas/screens/lista_quinielas_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -94,11 +95,20 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _buildFeatureCard(
-              icon: Icons.sports_soccer,
-              title: 'Quinielas del Mundial',
-              subtitle: 'Predice resultados de todos los partidos',
-              comingSoon: true,
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ListaQuinielasScreen(),
+                  ),
+                );
+              },
+              child: _buildFeatureCard(
+                icon: Icons.sports_soccer,
+                title: 'Quinielas del Mundial',
+                subtitle: 'Ver todas las quinielas disponibles',
+                comingSoon: false,
+              ),
             ),
             const SizedBox(height: 12),
             _buildFeatureCard(
