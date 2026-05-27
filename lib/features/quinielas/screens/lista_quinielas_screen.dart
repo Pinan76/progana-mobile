@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/quiniela.dart';
 import '../repository/quiniela_repository.dart';
+import 'detalle_quiniela_screen.dart';
 
 /// Pantalla principal de lista de quinielas
 /// 
@@ -333,13 +334,9 @@ class _QuinielaCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Detalle de "${quiniela.nombre}" - Próximamente'),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DetalleQuinielaScreen(quiniela: quiniela),
               ),
             );
           },
