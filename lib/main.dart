@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
-import 'core/theme/app_theme.dart';
+import 'core/theme/progana_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'features/splash/splash_screen.dart';
 
@@ -24,7 +24,7 @@ class ProganaApp extends StatelessWidget {
     return MaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: ProganaTheme.darkTheme,
       home: const SplashScreen(),
     );
   }
