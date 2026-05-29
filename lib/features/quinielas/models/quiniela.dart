@@ -1,7 +1,8 @@
 /// Modelo Quiniela - matchea tabla `quinielas` en Supabase
-/// 
+///
 /// L41: Verificado contra information_schema 22 may 2026
-/// 
+///      Getters Midnight Stadium agregados 30 may 2026
+///
 /// Enums confirmados:
 /// - estado_quiniela: {borrador, inscripcion, activa, finalizada, cancelada}
 /// - tipo_quiniela: {oficial_progana, privada_promotor}
@@ -139,6 +140,10 @@ class Quiniela {
     );
   }
 
+  // ===========================================================================
+  // GETTERS DE NEGOCIO (existentes Sprint 1)
+  // ===========================================================================
+
   /// Días restantes para que cierren inscripciones
   int? get diasParaCierre {
     if (cierreInscripcion == null) return null;
@@ -152,6 +157,63 @@ class Quiniela {
     final ahora = DateTime.now();
     if (fechaPrimerPartido.isBefore(ahora)) return 0;
     return fechaPrimerPartido.difference(ahora).inDays;
+  }
+
+  // ===========================================================================
+  // GETTERS MIDNIGHT STADIUM (agregados 30 may 2026)
+  // ===========================================================================
+
+  /// Número de quiniela con padding "01", "02", ..., "09"
+  String get numeroDisplay => numeroOrden.toString().padLeft(2, '0');
+
+  /// Rango de fechas display "11-15 JUN" o "26 JUN" si es 1 día
+  String get rangoDisplay {
+    const meses = [
+      '', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
+    ];
+
+    final diaInicio = fechaPrimerPartido.day;
+    final diaFin = fechaUltimoPartido.day;
+    final mesInicio = meses[fechaPrimerPartido.month];
+    final mesFin = meses[fechaUltimoPartido.month];
+
+    // Mismo día
+    if (fechaPrimerPartido.year == fechaUltimoPartido.year &&
+        fechaPrimerPartido.month == fechaUltimoPartido.month &&
+        diaInicio == diaFin) {
+      return '$diaInicio $mesInicio';
+    }
+
+    // Mismo mes
+    if (fechaPrimerPartido.year == fechaUltimoPartido.year &&
+        fechaPrimerPartido.month == fechaUltimoPartido.month) {
+      return '$diaInicio-$diaFin $mesInicio';
+    }
+
+    // Meses diferentes
+    return '$diaInicio $mesInicio - $diaFin $mesFin';
+  }
+
+  /// True si la quiniela está corriendo AHORA (estado activa + dentro de fechas)
+  bool get estaActivaAhora {
+    if (estado != EstadoQuiniela.activa) return false;
+    final ahora = DateTime.now();
+    return ahora.isAfter(fechaPrimerPartido) &&
+           ahora.isBefore(fechaUltimoPartido.add(const Duration(days: 1)));
+  }
+
+  /// True si la quiniela aún no inicia (fecha primer partido en futuro)
+  bool get esPendiente {
+    final ahora = DateTime.now();
+    return fechaPrimerPartido.isAfter(ahora);
+  }
+
+  /// True si la quiniela ya terminó
+  bool get yaTermino {
+    if (estado == EstadoQuiniela.finalizada) return true;
+    final ahora = DateTime.now();
+    return ahora.isAfter(fechaUltimoPartido.add(const Duration(days: 1)));
   }
 
   @override

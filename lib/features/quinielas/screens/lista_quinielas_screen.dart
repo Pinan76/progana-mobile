@@ -1,12 +1,36 @@
+// =============================================================================
+// PROGANA Fantasy — Lista Quinielas Screen (Midnight Stadium)
+// =============================================================================
+//
+// L41 COMPLIANT (30 may 2026):
+//   ✓ Usa QuinielaRepository.obtenerTodasQuinielas() existente
+//   ✓ Navega a DetalleQuinielaScreen(quiniela: q) preservando flujo Día 4
+//   ✓ Nombre clase ListaQuinielasScreen preservado (no rompe imports)
+//   ✓ Cards inline (sin widget separado por simplicidad)
+//   ✓ Compatible Flutter Web (sin dart:io)
+//   ✓ .withValues(alpha:) consistente
+//   ✓ Conteo de partidos vía query batch a partidos_quiniela
+//
+// REFACTOR VISUAL — MIDNIGHT STADIUM:
+//   ✓ Fondo midnight (sin gris claro)
+//   ✓ AppBar con back button + título Archivo Black cream
+//   ✓ Header decorativo "QUINIELAS · MUNDIAL 2026"
+//   ✓ Cards midnight2 con badge dorado + status pill
+//   ✓ Card #9 (Gran Final) destacada con borde dorado
+//   ✓ 4 estados: loading / success / empty / error
+//   ✓ Pull-to-refresh dorado
+//   ✓ Cero verde/blanco residual
+//
+// =============================================================================
+
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/theme/progana_theme.dart';
 import '../models/quiniela.dart';
 import '../repository/quiniela_repository.dart';
 import 'detalle_quiniela_screen.dart';
 
-/// Pantalla principal de lista de quinielas
-/// 
-/// L41: Diseño premium con jerarquía visual clara
 class ListaQuinielasScreen extends StatefulWidget {
   const ListaQuinielasScreen({super.key});
 
@@ -16,717 +40,640 @@ class ListaQuinielasScreen extends StatefulWidget {
 
 class _ListaQuinielasScreenState extends State<ListaQuinielasScreen> {
   final _repository = QuinielaRepository();
-  late Future<List<Quiniela>> _futureQuinielas;
+  late Future<_QuinielasListData> _future;
 
   @override
   void initState() {
     super.initState();
-    _cargarQuinielas();
+    _future = _loadData();
   }
 
-  void _cargarQuinielas() {
+  // ===========================================================================
+  // DATA LOADING
+  // ===========================================================================
+
+  Future<_QuinielasListData> _loadData() async {
+    // 1. Cargar todas las quinielas (usa repository existente)
+    final quinielas = await _repository.obtenerTodasQuinielas();
+
+    // 2. Query batch para contar partidos por quiniela
+    final supabase = Supabase.instance.client;
+    final partidosCount = <int, int>{};
+
+    if (quinielas.isNotEmpty) {
+      final ids = quinielas.map((q) => q.id).toList();
+      final response = await supabase
+          .from('partidos_quiniela')
+          .select('quiniela_id')
+          .inFilter('quiniela_id', ids);
+
+      for (final row in response as List) {
+        final qId = (row as Map)['quiniela_id'] as int;
+        partidosCount[qId] = (partidosCount[qId] ?? 0) + 1;
+      }
+    }
+
+    return _QuinielasListData(
+      quinielas: quinielas,
+      partidosCount: partidosCount,
+    );
+  }
+
+  Future<void> _handleRefresh() async {
     setState(() {
-      _futureQuinielas = _repository.obtenerTodasQuinielas();
+      _future = _loadData();
     });
+    await _future;
   }
 
-  Future<void> _refrescar() async {
-    _cargarQuinielas();
-    await _futureQuinielas;
+  void _handleQuinielaTap(Quiniela q) {
+    // Navegación preservada del Día 4
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DetalleQuinielaScreen(quiniela: q),
+      ),
+    );
   }
+
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
-      appBar: AppBar(
-        title: const Text(
-          'Quinielas Mundial 2026',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.3,
-          ),
-        ),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _cargarQuinielas,
-            tooltip: 'Recargar',
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refrescar,
-        color: AppColors.verdeMexicano,
-        child: FutureBuilder<List<Quiniela>>(
-          future: _futureQuinielas,
-          builder: (context, snapshot) {
-            // ESTADO 1: Cargando
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: AppColors.verdeMexicano),
-                    SizedBox(height: 16),
-                    Text(
-                      'Cargando quinielas...',
-                      style: TextStyle(color: AppColors.grisMedio),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            // ESTADO 2: Error
-            if (snapshot.hasError) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  const SizedBox(height: 80),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            size: 64,
-                            color: AppColors.error,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No pudimos cargar las quinielas',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: AppColors.grisMedio,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: _cargarQuinielas,
-                            icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Reintentar'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            // ESTADO 3: Vacío
-            final quinielas = snapshot.data ?? [];
-            if (quinielas.isEmpty) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 80),
-                  Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32.0),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.sports_soccer_rounded,
-                            size: 64,
-                            color: AppColors.grisMedio,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No hay quinielas disponibles',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Pronto habrá nuevas quinielas\npara el Mundial 2026',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.grisMedio),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            // ESTADO 4: Con datos
-            return Column(
-              children: [
-                // Header con contador
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  color: Colors.white,
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.verdeMexicano.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.emoji_events_rounded,
-                          color: AppColors.verdeMexicano,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${quinielas.length} ${quinielas.length == 1 ? "Quiniela" : "Quinielas"}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.grisOscuro,
-                              ),
-                            ),
-                            const Text(
-                              'Mundial FIFA 2026',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.grisMedio,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Text(
-                        '🇲🇽 🇺🇸 🇨🇦',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                    ],
-                  ),
-                ),
-                // Separador sutil
-                Container(
-                  height: 1,
-                  color: const Color(0xFFE8EBEF),
-                ),
-                // Lista de cards
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: quinielas.length,
-                    itemBuilder: (context, index) {
-                      return _QuinielaCard(quiniela: quinielas[index]);
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
+      backgroundColor: ProganaColors.midnight,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(),
+            _buildHeader(),
+            Expanded(child: _buildBody()),
+          ],
         ),
       ),
     );
   }
-}
 
-/// Card visual PREMIUM de una quiniela
-class _QuinielaCard extends StatelessWidget {
-  final Quiniela quiniela;
+  // ===========================================================================
+  // APP BAR Midnight (con back button)
+  // ===========================================================================
 
-  const _QuinielaCard({required this.quiniela});
-
-  /// Parsea el color hex de la BD (ej: "#0066CC") a Color
-  Color _parseColor() {
-    if (quiniela.colorPrimario == null) return AppColors.verdeMexicano;
-    try {
-      final hex = quiniela.colorPrimario!.replaceAll('#', '');
-      return Color(int.parse('FF$hex', radix: 16));
-    } catch (_) {
-      return AppColors.verdeMexicano;
-    }
-  }
-
-  /// Color según el estado de la quiniela
-  Color _colorEstado() {
-    switch (quiniela.estado) {
-      case EstadoQuiniela.inscripcion:
-        return AppColors.exito;
-      case EstadoQuiniela.activa:
-        return AppColors.info;
-      case EstadoQuiniela.borrador:
-        return AppColors.dorado;
-      case EstadoQuiniela.finalizada:
-        return AppColors.grisMedio;
-      case EstadoQuiniela.cancelada:
-        return AppColors.error;
-    }
-  }
-
-  /// Icono según el estado
-  IconData _iconoEstado() {
-    switch (quiniela.estado) {
-      case EstadoQuiniela.inscripcion:
-        return Icons.check_circle_rounded;
-      case EstadoQuiniela.activa:
-        return Icons.play_circle_filled_rounded;
-      case EstadoQuiniela.borrador:
-        return Icons.schedule_rounded;
-      case EstadoQuiniela.finalizada:
-        return Icons.emoji_events_rounded;
-      case EstadoQuiniela.cancelada:
-        return Icons.cancel_rounded;
-    }
-  }
-
-  String _formatearFecha(DateTime fecha) {
-    const meses = [
-      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
-    ];
-    return '${fecha.day} ${meses[fecha.month - 1]}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorBanner = _parseColor();
-    final colorEstado = _colorEstado();
-    final iconoEstado = _iconoEstado();
-    final numeroQ = quiniela.numeroOrden.toString().padLeft(2, '0');
-
+  Widget _buildAppBar() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: colorBanner.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => DetalleQuinielaScreen(quiniela: quiniela),
-              ),
-            );
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ═══════════════════════════════════════════════════════
-              // HEADER PREMIUM con número Q gigante
-              // ═══════════════════════════════════════════════════════
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                child: Container(
-                  height: 140,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        colorBanner,
-                        colorBanner.withValues(alpha: 0.85),
-                        Color.lerp(colorBanner, Colors.black, 0.2)!,
-                      ],
-                      stops: const [0.0, 0.6, 1.0],
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      // Patrón decorativo - círculos sutiles
-                      Positioned(
-                        right: -30,
-                        bottom: -30,
-                        child: Container(
-                          width: 140,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 40,
-                        top: -20,
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.06),
-                          ),
-                        ),
-                      ),
-                      // Icono balón de fondo (decorativo)
-                      Positioned(
-                        right: 16,
-                        bottom: 16,
-                        child: Icon(
-                          Icons.sports_soccer_rounded,
-                          size: 56,
-                          color: Colors.white.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      // Contenido principal
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: [
-                            // Número Q gigante
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  numeroQ,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 56,
-                                    fontWeight: FontWeight.w900,
-                                    height: 1,
-                                    letterSpacing: -2,
-                                  ),
-                                ),
-                                Container(
-                                  margin: const EdgeInsets.only(top: 4),
-                                  width: 32,
-                                  height: 3,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 20),
-                            // Info principal
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'JORNADA',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.8),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 3,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    quiniela.nombre.toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                      height: 1.1,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  // Badge de estado
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          iconoEstado,
-                                          size: 12,
-                                          color: colorEstado,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          quiniela.estado.etiqueta.toUpperCase(),
-                                          style: TextStyle(
-                                            color: colorEstado,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.8,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ═══════════════════════════════════════════════════════
-              // BODY - Fecha + Métricas
-              // ═══════════════════════════════════════════════════════
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Fila de fecha con cuenta regresiva
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: colorBanner.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.calendar_today_rounded,
-                            size: 16,
-                            color: colorBanner,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'INICIA',
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: AppColors.grisMedio,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            Text(
-                              _formatearFecha(quiniela.fechaPrimerPartido),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.grisOscuro,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        if (quiniela.diasParaInicio != null &&
-                            quiniela.diasParaInicio! > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.dorado,
-                                  AppColors.dorado.withValues(alpha: 0.8),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.dorado.withValues(alpha: 0.4),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.timer_rounded,
-                                  size: 14,
-                                  color: AppColors.grisOscuro,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${quiniela.diasParaInicio} días',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.grisOscuro,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-
-                    // Descripción si existe
-                    if (quiniela.descripcion != null) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        height: 1,
-                        color: const Color(0xFFEEF1F4),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        quiniela.descripcion!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.grisMedio,
-                          height: 1.5,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-
-                    const SizedBox(height: 16),
-                    Container(
-                      height: 1,
-                      color: const Color(0xFFEEF1F4),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Métricas como mini-cards
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _MetricaMiniCard(
-                            icon: Icons.people_alt_rounded,
-                            valor: '${quiniela.totalInscritos}',
-                            etiqueta: 'INSCRITOS',
-                            color: colorBanner,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _MetricaMiniCard(
-                            icon: Icons.fact_check_rounded,
-                            valor: '${quiniela.totalPredicciones}',
-                            etiqueta: 'PREDICCIONES',
-                            color: colorBanner,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: colorBanner,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        border: Border(
+          bottom: BorderSide(
+            color: ProganaColors.gold.withValues(alpha: 0.05),
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Mini card para métrica individual
-class _MetricaMiniCard extends StatelessWidget {
-  final IconData icon;
-  final String valor;
-  final String etiqueta;
-  final Color color;
-
-  const _MetricaMiniCard({
-    required this.icon,
-    required this.valor,
-    required this.etiqueta,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFEEF1F4),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 6),
-              Text(
-                valor,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                  height: 1,
+          // Back button
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ProganaColors.midnight2,
+                border: Border.all(
+                  color: ProganaColors.gold.withValues(alpha: 0.2),
                 ),
               ),
-            ],
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                color: ProganaColors.cream,
+                size: 14,
+              ),
+            ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(width: 12),
           Text(
-            etiqueta,
-            style: const TextStyle(
-              fontSize: 9,
-              color: AppColors.grisMedio,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+            'TODAS LAS QUINIELAS',
+            style: GoogleFonts.archivoBlack(
+              color: ProganaColors.cream,
+              fontSize: 13,
+              letterSpacing: 1,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  // ===========================================================================
+  // HEADER — Decorativo
+  // ===========================================================================
+
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: ProganaColors.gold.withValues(alpha: 0.15),
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'QUINIELAS',
+            style: GoogleFonts.archivoBlack(
+              color: ProganaColors.cream,
+              fontSize: 22,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'MUNDIAL 2026 · 🇲🇽 🇺🇸 🇨🇦',
+            style: GoogleFonts.jetBrainsMono(
+              color: ProganaColors.gold,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // BODY — FutureBuilder con 4 estados
+  // ===========================================================================
+
+  Widget _buildBody() {
+    return FutureBuilder<_QuinielasListData>(
+      future: _future,
+      builder: (context, snapshot) {
+        // ESTADO: LOADING
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingState();
+        }
+
+        // ESTADO: ERROR
+        if (snapshot.hasError) {
+          return _buildErrorState(snapshot.error);
+        }
+
+        // ESTADO: SUCCESS (con o sin datos)
+        final data = snapshot.data;
+        if (data == null || data.quinielas.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        // ESTADO: SUCCESS con datos
+        return _buildSuccessState(data);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: LOADING (skeleton cards shimmer)
+  // ===========================================================================
+
+  Widget _buildLoadingState() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 5,
+      itemBuilder: (context, index) => _buildSkeletonCard(),
+    );
+  }
+
+  Widget _buildSkeletonCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ProganaColors.midnight2,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: const [
+          _ShimmerBox(width: 36, height: 36, radius: 8),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ShimmerBox(width: double.infinity, height: 10, radius: 4),
+                SizedBox(height: 6),
+                _ShimmerBox(width: 120, height: 8, radius: 4),
+              ],
+            ),
+          ),
+          SizedBox(width: 8),
+          _ShimmerBox(width: 60, height: 22, radius: 4),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: SUCCESS (lista de quinielas)
+  // ===========================================================================
+
+  Widget _buildSuccessState(_QuinielasListData data) {
+    return RefreshIndicator(
+      color: ProganaColors.gold,
+      backgroundColor: ProganaColors.midnight2,
+      onRefresh: _handleRefresh,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: data.quinielas.length,
+        itemBuilder: (context, index) {
+          final q = data.quinielas[index];
+          final totalPartidos = data.partidosCount[q.id] ?? 0;
+          final esGranFinal = q.numeroOrden == 9;
+
+          return _buildQuinielaCard(
+            quiniela: q,
+            totalPartidos: totalPartidos,
+            destacada: esGranFinal,
+          );
+        },
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // QUINIELA CARD — Inline (sin widget separado)
+  // ===========================================================================
+
+  Widget _buildQuinielaCard({
+    required Quiniela quiniela,
+    required int totalPartidos,
+    required bool destacada,
+  }) {
+    return GestureDetector(
+      onTap: () => _handleQuinielaTap(quiniela),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: destacada
+              ? ProganaColors.gold.withValues(alpha: 0.08)
+              : ProganaColors.midnight2,
+          border: Border.all(
+            color: destacada
+                ? ProganaColors.gold
+                : Colors.white.withValues(alpha: 0.04),
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            _buildNumberBadge(quiniela, destacada),
+            const SizedBox(width: 12),
+            Expanded(child: _buildCardInfo(quiniela, totalPartidos, destacada)),
+            const SizedBox(width: 8),
+            _buildStatusPill(quiniela),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNumberBadge(Quiniela quiniela, bool destacada) {
+    if (destacada) {
+      // Gran Final: badge dorado sólido
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [ProganaColors.gold, ProganaColors.goldDark],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          quiniela.numeroDisplay,
+          style: GoogleFonts.archivoBlack(
+            color: ProganaColors.midnight,
+            fontSize: 14,
+          ),
+        ),
+      );
+    }
+
+    // Normal: badge con gradient dorado sutil
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            ProganaColors.gold.withValues(alpha: 0.2),
+            ProganaColors.gold.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: ProganaColors.gold.withValues(alpha: 0.3),
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        quiniela.numeroDisplay,
+        style: GoogleFonts.archivoBlack(
+          color: ProganaColors.gold,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardInfo(Quiniela quiniela, int totalPartidos, bool destacada) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          quiniela.nombre,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.outfit(
+            color: destacada ? ProganaColors.gold : ProganaColors.cream,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '$totalPartidos PARTIDOS · ${quiniela.rangoDisplay}',
+          style: GoogleFonts.jetBrainsMono(
+            color: ProganaColors.creamDim,
+            fontSize: 9,
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusPill(Quiniela quiniela) {
+    Color color;
+    String label;
+
+    if (quiniela.estaActivaAhora) {
+      color = ProganaColors.crimson;
+      label = 'EN VIVO';
+    } else if (quiniela.estado == EstadoQuiniela.inscripcion) {
+      color = ProganaColors.emerald;
+      label = 'ABIERTA';
+    } else if (quiniela.yaTermino) {
+      color = ProganaColors.grey;
+      label = 'FINAL';
+    } else if (quiniela.esPendiente &&
+        quiniela.estado == EstadoQuiniela.borrador) {
+      color = ProganaColors.gold;
+      final dia = quiniela.fechaPrimerPartido.day;
+      final mes = _mesAbreviado(quiniela.fechaPrimerPartido.month);
+      label = '$dia $mes';
+    } else {
+      color = ProganaColors.grey;
+      label = quiniela.estado.etiqueta.toUpperCase();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.jetBrainsMono(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  String _mesAbreviado(int mes) {
+    const meses = [
+      '', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
+    ];
+    return meses[mes];
+  }
+
+  // ===========================================================================
+  // ESTADO: EMPTY
+  // ===========================================================================
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Opacity(
+              opacity: 0.3,
+              child: Text(
+                '🏆',
+                style: GoogleFonts.outfit(fontSize: 56),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'SIN QUINIELAS ACTIVAS',
+              style: GoogleFonts.archivoBlack(
+                color: ProganaColors.cream,
+                fontSize: 14,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'El Mundial 2026 comienza el 11 de junio. Pronto verás todas las quinielas aquí.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                color: ProganaColors.creamDim,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: ERROR
+  // ===========================================================================
+
+  Widget _buildErrorState(Object? error) {
+    String message = 'Error de conexión';
+    if (error != null) {
+      message = error.toString().replaceFirst('Exception: ', '');
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: ProganaColors.crimson.withValues(alpha: 0.1),
+                border: Border.all(color: ProganaColors.crimson),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  const Text('⚠️', style: TextStyle(fontSize: 32)),
+                  const SizedBox(height: 12),
+                  Text(
+                    'ERROR DE CONEXIÓN',
+                    style: GoogleFonts.archivoBlack(
+                      color: ProganaColors.crimson,
+                      fontSize: 13,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      color: ProganaColors.creamDim,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _handleRefresh,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ProganaColors.gold,
+                foregroundColor: ProganaColors.midnight,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'REINTENTAR',
+                style: GoogleFonts.archivoBlack(
+                  color: ProganaColors.midnight,
+                  fontSize: 11,
+                  letterSpacing: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// DATA HOLDER — Quinielas + conteo de partidos
+// =============================================================================
+
+class _QuinielasListData {
+  final List<Quiniela> quinielas;
+  final Map<int, int> partidosCount;
+
+  _QuinielasListData({
+    required this.quinielas,
+    required this.partidosCount,
+  });
+}
+
+// =============================================================================
+// SHIMMER BOX — Skeleton animado
+// =============================================================================
+
+class _ShimmerBox extends StatefulWidget {
+  final double width;
+  final double height;
+  final double radius;
+
+  const _ShimmerBox({
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+
+  @override
+  State<_ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<_ShimmerBox>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.radius),
+            gradient: LinearGradient(
+              colors: const [
+                ProganaColors.midnight2,
+                ProganaColors.midnight3,
+                ProganaColors.midnight2,
+              ],
+              stops: [
+                (_controller.value - 0.3).clamp(0.0, 1.0),
+                _controller.value.clamp(0.0, 1.0),
+                (_controller.value + 0.3).clamp(0.0, 1.0),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
