@@ -3,10 +3,13 @@ import '../../../core/theme/app_theme.dart';
 import '../models/quiniela.dart';
 import '../models/partido.dart';
 import '../repository/partido_repository.dart';
+import '../../inscripciones/models/inscripcion.dart';
+import '../../inscripciones/repository/inscripcion_repository.dart';
 
 /// Pantalla de Detalle de una Quiniela
 /// 
 /// L41: Diseño premium con jerarquía visual
+/// L41: Inscripción funcional verificada 28 may 2026
 /// Recibe el objeto Quiniela completo (ya cargado desde la lista)
 class DetalleQuinielaScreen extends StatefulWidget {
   final Quiniela quiniela;
@@ -19,18 +22,187 @@ class DetalleQuinielaScreen extends StatefulWidget {
 
 class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
   final _partidoRepo = PartidoRepository();
+  final _inscripcionRepo = InscripcionRepository();
   late Future<List<Partido>> _futurePartidos;
+
+  // Estado de inscripción
+  Inscripcion? _miInscripcion;
+  bool _verificandoInscripcion = true;
+  bool _procesandoInscripcion = false;
 
   @override
   void initState() {
     super.initState();
     _cargarPartidos();
+    _verificarMiInscripcion();
   }
 
   void _cargarPartidos() {
     setState(() {
       _futurePartidos = _partidoRepo.obtenerPartidosDeQuiniela(widget.quiniela.id);
     });
+  }
+
+  Future<void> _verificarMiInscripcion() async {
+    try {
+      final insc = await _inscripcionRepo.verificarInscripcion(widget.quiniela.id);
+      if (mounted) {
+        setState(() {
+          _miInscripcion = insc;
+          _verificandoInscripcion = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _verificandoInscripcion = false);
+      }
+    }
+  }
+
+  Future<void> _inscribirme() async {
+    if (_procesandoInscripcion) return;
+
+    setState(() => _procesandoInscripcion = true);
+
+    try {
+      final insc = await _inscripcionRepo.inscribirme(widget.quiniela.id);
+      if (mounted) {
+        setState(() {
+          _miInscripcion = insc;
+          _procesandoInscripcion = false;
+        });
+        _mostrarDialogExito();
+      }
+    } on InscripcionDuplicadaException catch (e) {
+      if (mounted) {
+        setState(() => _procesandoInscripcion = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: AppColors.advertencia,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _procesandoInscripcion = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _mostrarDialogExito() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Ícono éxito con círculo verde gradient
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.exito, Color(0xFF2E7D32)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.exito.withValues(alpha: 0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 56,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '¡Listo!',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.grisOscuro,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Estás inscrito en',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.grisMedio,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.quiniela.nombre,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grisOscuro,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Prepárate para predecir el Mundial 2026 🏆',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.grisMedio,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _colorBanner,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'CONTINUAR',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Color get _colorBanner {
@@ -94,6 +266,152 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
     final h = local.hour.toString().padLeft(2, '0');
     final m = local.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  /// Construye el botón de inscripción según el estado actual
+  /// 
+  /// Estados:
+  /// 1. Verificando si ya está inscrito → loading gris
+  /// 2. Ya inscrito → botón verde "INSCRITO" con check
+  /// 3. Procesando inscripción → loading dentro de botón
+  /// 4. No inscrito → botón color quiniela "INSCRIBIRME" funcional
+  Widget _construirBotonInscripcion(Color color) {
+    // Estado 1: Verificando si está inscrito
+    if (_verificandoInscripcion) {
+      return Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          color: AppColors.grisClaro,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              color: AppColors.grisMedio,
+              strokeWidth: 2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Estado 2: Ya inscrito — botón "INSCRITO" verde con check
+    if (_miInscripcion != null) {
+      return Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.exito, Color(0xFF2E7D32)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.exito.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.check_circle_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'INSCRITO',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Estado 3: Procesando inscripción
+    if (_procesandoInscripcion) {
+      return Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color.withValues(alpha: 0.6), color.withValues(alpha: 0.4)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 2.5,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Estado 4: NO inscrito — botón "INSCRIBIRME" funcional
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, color.withValues(alpha: 0.8)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _inscribirme,
+          child: const Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.flash_on_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'INSCRIBIRME',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -296,62 +614,10 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
                 onReintentar: _cargarPartidos,
               ),
 
-              // CTA inferior
+              // CTA inferior — botón dinámico de inscripción
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [color, color.withValues(alpha: 0.8)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Inscripción - Próximamente'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
-                      child: const Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.flash_on_rounded,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'INSCRIBIRME',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                child: _construirBotonInscripcion(color),
               ),
               const SizedBox(height: 20),
             ]),
