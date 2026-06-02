@@ -1,16 +1,38 @@
+// =============================================================================
+// PROGANA Fantasy — Detalle Quiniela Screen (Midnight Stadium)
+// =============================================================================
+//
+// L41 COMPLIANT (2 jun 2026 - Día 7):
+//   ✓ Constructor preservado: DetalleQuinielaScreen(quiniela: q)
+//   ✓ InscripcionRepository preservado bit-perfect del Día 4
+//   ✓ PartidoRepository.obtenerPartidosDeQuiniela() preservado
+//   ✓ Botón inscripción 4 estados (verificando/inscrito/procesando/no_inscrito)
+//   ✓ Dialog éxito preservado (rediseñado Midnight)
+//   ✓ Manejo de InscripcionDuplicadaException preservado
+//   ✓ Compatible Flutter Web (sin dart:io)
+//   ✓ .withValues(alpha:) consistente
+//   ✓ Usa modelos REALES: Quiniela, Partido, Equipo, Inscripcion
+//
+// DISEÑO MIDNIGHT STADIUM (réplica 99% diseño HTML pantalla 03):
+//   ✓ Header verde→midnight gradient + pattern diagonal 45°
+//   ✓ Número gigante translúcido decorativo
+//   ✓ Sponsor "PATROCINADOR / CERVECERA MX" (demo sponsor)
+//   ✓ 3 stat pills (Predichos / Puntos / Posición)
+//   ✓ Botón inscripción dorado con 4 estados visuales
+//   ✓ Lista partidos compacta: día | equipos | predicción
+//   ✓ Dialog éxito midnight2 + check dorado
+//
+// =============================================================================
+
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/theme/progana_theme.dart';
 import '../models/quiniela.dart';
 import '../models/partido.dart';
 import '../repository/partido_repository.dart';
 import '../../inscripciones/models/inscripcion.dart';
 import '../../inscripciones/repository/inscripcion_repository.dart';
 
-/// Pantalla de Detalle de una Quiniela
-/// 
-/// L41: Diseño premium con jerarquía visual
-/// L41: Inscripción funcional verificada 28 may 2026
-/// Recibe el objeto Quiniela completo (ya cargado desde la lista)
 class DetalleQuinielaScreen extends StatefulWidget {
   final Quiniela quiniela;
 
@@ -25,7 +47,7 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
   final _inscripcionRepo = InscripcionRepository();
   late Future<List<Partido>> _futurePartidos;
 
-  // Estado de inscripción
+  // Estado de inscripción (preservado Día 4)
   Inscripcion? _miInscripcion;
   bool _verificandoInscripcion = true;
   bool _procesandoInscripcion = false;
@@ -37,15 +59,21 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
     _verificarMiInscripcion();
   }
 
+  // ===========================================================================
+  // DATA LOADING (preservado bit-perfect del Día 4)
+  // ===========================================================================
+
   void _cargarPartidos() {
     setState(() {
-      _futurePartidos = _partidoRepo.obtenerPartidosDeQuiniela(widget.quiniela.id);
+      _futurePartidos =
+          _partidoRepo.obtenerPartidosDeQuiniela(widget.quiniela.id);
     });
   }
 
   Future<void> _verificarMiInscripcion() async {
     try {
-      final insc = await _inscripcionRepo.verificarInscripcion(widget.quiniela.id);
+      final insc =
+          await _inscripcionRepo.verificarInscripcion(widget.quiniela.id);
       if (mounted) {
         setState(() {
           _miInscripcion = insc;
@@ -76,42 +104,67 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
     } on InscripcionDuplicadaException catch (e) {
       if (mounted) {
         setState(() => _procesandoInscripcion = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: AppColors.advertencia,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSnackBar(e.message, ProganaColors.gold);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _procesandoInscripcion = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSnackBar('Error: $e', ProganaColors.crimson);
       }
     }
   }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.outfit(
+            color: ProganaColors.cream,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DIALOG ÉXITO MIDNIGHT (rediseño completo)
+  // ===========================================================================
 
   void _mostrarDialogExito() {
     showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Padding(
+        backgroundColor: Colors.transparent,
+        child: Container(
           padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: ProganaColors.midnight2,
+            border: Border.all(
+              color: ProganaColors.gold.withValues(alpha: 0.3),
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: ProganaColors.gold.withValues(alpha: 0.2),
+                blurRadius: 30,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Ícono éxito con círculo verde gradient
+              // Ícono check dorado con glow
               Container(
                 width: 88,
                 height: 88,
@@ -120,79 +173,80 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [AppColors.exito, Color(0xFF2E7D32)],
+                    colors: [ProganaColors.gold, ProganaColors.goldDark],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.exito.withValues(alpha: 0.4),
-                      blurRadius: 20,
+                      color: ProganaColors.gold.withValues(alpha: 0.5),
+                      blurRadius: 30,
                       offset: const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: const Icon(
                   Icons.check_rounded,
-                  color: Colors.white,
+                  color: ProganaColors.midnight,
                   size: 56,
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                '¡Listo!',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.grisOscuro,
-                  letterSpacing: 0.5,
+              Text(
+                '¡INSCRITO!',
+                style: GoogleFonts.archivoBlack(
+                  color: ProganaColors.cream,
+                  fontSize: 24,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Estás inscrito en',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.grisMedio,
+              const SizedBox(height: 12),
+              Text(
+                'Estás participando en',
+                style: GoogleFonts.outfit(
+                  color: ProganaColors.creamDim,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 widget.quiniela.nombre,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
+                style: GoogleFonts.outfit(
+                  color: ProganaColors.gold,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.grisOscuro,
                 ),
               ),
-              const SizedBox(height: 4),
-              const Text(
+              const SizedBox(height: 12),
+              Text(
                 'Prepárate para predecir el Mundial 2026 🏆',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: GoogleFonts.outfit(
+                  color: ProganaColors.creamDim,
                   fontSize: 12,
-                  color: AppColors.grisMedio,
                   height: 1.5,
                 ),
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 48,
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(ctx).pop(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _colorBanner,
-                    foregroundColor: Colors.white,
+                    backgroundColor: ProganaColors.gold,
+                    foregroundColor: ProganaColors.midnight,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    elevation: 0,
+                    elevation: 12,
+                    shadowColor: ProganaColors.gold.withValues(alpha: 0.4),
                   ),
-                  child: const Text(
+                  child: Text(
                     'CONTINUAR',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                    style: GoogleFonts.archivoBlack(
+                      color: ProganaColors.midnight,
+                      fontSize: 13,
                       letterSpacing: 1.5,
                     ),
                   ),
@@ -205,92 +259,289 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
     );
   }
 
-  Color get _colorBanner {
-    if (widget.quiniela.colorPrimario == null) return AppColors.verdeMexicano;
-    try {
-      final hex = widget.quiniela.colorPrimario!.replaceAll('#', '');
-      return Color(int.parse('FF$hex', radix: 16));
-    } catch (_) {
-      return AppColors.verdeMexicano;
-    }
+  // ===========================================================================
+  // BUILD PRINCIPAL
+  // ===========================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: ProganaColors.midnight,
+      body: CustomScrollView(
+        slivers: [
+          // Header verde decorativo
+          SliverToBoxAdapter(
+            child: SafeArea(
+              bottom: false,
+              child: _buildHeader(),
+            ),
+          ),
+
+          // Stat pills
+          SliverToBoxAdapter(child: _buildStatPills()),
+
+          // Botón inscripción
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: _buildBotonInscripcion(),
+            ),
+          ),
+
+          // Section header partidos
+          SliverToBoxAdapter(child: _buildPartidosHeader()),
+
+          // Lista de partidos
+          _buildPartidosList(),
+
+          // Bottom padding
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        ],
+      ),
+    );
   }
 
-  Color get _colorEstado {
-    switch (widget.quiniela.estado) {
-      case EstadoQuiniela.inscripcion:
-        return AppColors.exito;
-      case EstadoQuiniela.activa:
-        return AppColors.info;
-      case EstadoQuiniela.borrador:
-        return AppColors.dorado;
-      case EstadoQuiniela.finalizada:
-        return AppColors.grisMedio;
-      case EstadoQuiniela.cancelada:
-        return AppColors.error;
-    }
+  // ===========================================================================
+  // HEADER VERDE — Gradient + pattern + número gigante decorativo
+  // ===========================================================================
+
+  Widget _buildHeader() {
+    return Container(
+      height: 160,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [ProganaColors.emeraldDeep, ProganaColors.midnight3],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Gradient overlay (oscurece hacia abajo)
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  ProganaColors.midnight.withValues(alpha: 0.3),
+                  ProganaColors.midnight,
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.0, 0.7, 1.0],
+              ),
+            ),
+          ),
+
+          // Pattern diagonal 45° sutil
+          CustomPaint(
+            size: Size.infinite,
+            painter: _DiagonalPatternPainter(),
+          ),
+
+          // Número GIGANTE translúcido decorativo
+          Positioned(
+            top: 40,
+            left: 16,
+            child: Text(
+              widget.quiniela.numeroDisplay,
+              style: GoogleFonts.archivoBlack(
+                color: Colors.white.withValues(alpha: 0.1),
+                fontSize: 72,
+                height: 1,
+                letterSpacing: -3,
+              ),
+            ),
+          ),
+
+          // Botón back
+          Positioned(
+            top: 12,
+            left: 16,
+            child: _buildBackButton(),
+          ),
+
+          // Sponsor
+          Positioned(
+            top: 16,
+            right: 16,
+            child: _buildSponsorLabel(),
+          ),
+
+          // Título + subtítulo
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.quiniela.nombre.toUpperCase(),
+                  style: GoogleFonts.archivoBlack(
+                    color: ProganaColors.cream,
+                    fontSize: 20,
+                    letterSpacing: -0.2,
+                    height: 1,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${widget.quiniela.rangoDisplay} · MUNDIAL 2026',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: ProganaColors.creamDim,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 2.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  IconData get _iconoEstado {
-    switch (widget.quiniela.estado) {
-      case EstadoQuiniela.inscripcion:
-        return Icons.check_circle_rounded;
-      case EstadoQuiniela.activa:
-        return Icons.play_circle_filled_rounded;
-      case EstadoQuiniela.borrador:
-        return Icons.schedule_rounded;
-      case EstadoQuiniela.finalizada:
-        return Icons.emoji_events_rounded;
-      case EstadoQuiniela.cancelada:
-        return Icons.cancel_rounded;
-    }
+  Widget _buildBackButton() {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).pop(),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.4),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.arrow_back_ios_new,
+          color: ProganaColors.cream,
+          size: 14,
+        ),
+      ),
+    );
   }
 
-  String _formatearFechaCompleta(DateTime fecha) {
-    const meses = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-    return '${fecha.day} de ${meses[fecha.month - 1]}';
+  Widget _buildSponsorLabel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'PATROCINADOR',
+          style: GoogleFonts.jetBrainsMono(
+            color: ProganaColors.creamDim,
+            fontSize: 8,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 2.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'CERVECERA MX',
+          style: GoogleFonts.jetBrainsMono(
+            color: ProganaColors.gold,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2.5,
+          ),
+        ),
+      ],
+    );
   }
 
-  String _formatearFechaCorta(DateTime fecha) {
-    const meses = [
-      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
-    ];
-    return '${fecha.day} ${meses[fecha.month - 1]}';
+  // ===========================================================================
+  // STAT PILLS — Predichos / Puntos / Posición
+  // ===========================================================================
+
+  Widget _buildStatPills() {
+    final predichos = _miInscripcion?.totalPredicciones ?? 0;
+    final puntos = _miInscripcion?.puntosTotales ?? 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Expanded(child: _buildStatPill(predichos.toString(), 'Predichos')),
+          const SizedBox(width: 8),
+          Expanded(child: _buildStatPill(_formatPuntos(puntos), 'Puntos')),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildStatPill(
+              _miInscripcion != null ? '#—' : '—',
+              'Posición',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  String _formatearHora(DateTime fecha) {
-    final local = fecha.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+  String _formatPuntos(double puntos) {
+    if (puntos == puntos.toInt()) return puntos.toInt().toString();
+    return puntos.toStringAsFixed(1);
   }
 
-  /// Construye el botón de inscripción según el estado actual
-  /// 
-  /// Estados:
-  /// 1. Verificando si ya está inscrito → loading gris
-  /// 2. Ya inscrito → botón verde "INSCRITO" con check
-  /// 3. Procesando inscripción → loading dentro de botón
-  /// 4. No inscrito → botón color quiniela "INSCRIBIRME" funcional
-  Widget _construirBotonInscripcion(Color color) {
-    // Estado 1: Verificando si está inscrito
+  Widget _buildStatPill(String value, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: ProganaColors.midnight2,
+        border: Border.all(
+          color: ProganaColors.gold.withValues(alpha: 0.1),
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.archivoBlack(
+              color: ProganaColors.gold,
+              fontSize: 20,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.jetBrainsMono(
+              color: ProganaColors.creamDim,
+              fontSize: 8,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // BOTÓN INSCRIPCIÓN — 4 estados (preservado del Día 4, rediseñado Midnight)
+  // ===========================================================================
+
+  Widget _buildBotonInscripcion() {
+    // Estado 1: Verificando
     if (_verificandoInscripcion) {
       return Container(
         width: double.infinity,
-        height: 56,
+        height: 52,
         decoration: BoxDecoration(
-          color: AppColors.grisClaro,
-          borderRadius: BorderRadius.circular(16),
+          color: ProganaColors.midnight2,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: const Center(
           child: SizedBox(
-            width: 24,
-            height: 24,
+            width: 20,
+            height: 20,
             child: CircularProgressIndicator(
-              color: AppColors.grisMedio,
+              color: ProganaColors.gold,
               strokeWidth: 2,
             ),
           ),
@@ -298,40 +549,39 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
       );
     }
 
-    // Estado 2: Ya inscrito — botón "INSCRITO" verde con check
+    // Estado 2: Ya inscrito
     if (_miInscripcion != null) {
       return Container(
         width: double.infinity,
-        height: 56,
+        height: 52,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppColors.exito, Color(0xFF2E7D32)],
+            colors: [ProganaColors.emerald, ProganaColors.emeraldDeep],
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: AppColors.exito.withValues(alpha: 0.3),
+              color: ProganaColors.emerald.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: const Center(
+        child: Center(
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_rounded,
-                color: Colors.white,
-                size: 22,
+                color: ProganaColors.cream,
+                size: 20,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
                 'INSCRITO',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                style: GoogleFonts.archivoBlack(
+                  color: ProganaColors.cream,
+                  fontSize: 13,
                   letterSpacing: 1.5,
                 ),
               ),
@@ -341,23 +591,21 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
       );
     }
 
-    // Estado 3: Procesando inscripción
+    // Estado 3: Procesando
     if (_procesandoInscripcion) {
       return Container(
         width: double.infinity,
-        height: 56,
+        height: 52,
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [color.withValues(alpha: 0.6), color.withValues(alpha: 0.4)],
-          ),
-          borderRadius: BorderRadius.circular(16),
+          color: ProganaColors.gold.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: const Center(
           child: SizedBox(
-            width: 24,
-            height: 24,
+            width: 22,
+            height: 22,
             child: CircularProgressIndicator(
-              color: Colors.white,
+              color: ProganaColors.midnight,
               strokeWidth: 2.5,
             ),
           ),
@@ -365,965 +613,423 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
       );
     }
 
-    // Estado 4: NO inscrito — botón "INSCRIBIRME" funcional
-    return Container(
+    // Estado 4: NO inscrito - botón funcional
+    return SizedBox(
       width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, color.withValues(alpha: 0.8)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: _inscribirme,
-          child: const Center(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.flash_on_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'INSCRIBIRME',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
+      height: 52,
+      child: ElevatedButton(
+        onPressed: _inscribirme,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: ProganaColors.gold,
+          foregroundColor: ProganaColors.midnight,
+          elevation: 12,
+          shadowColor: ProganaColors.gold.withValues(alpha: 0.4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _colorBanner;
-    final numeroQ = widget.quiniela.numeroOrden.toString().padLeft(2, '0');
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
-      body: CustomScrollView(
-        slivers: [
-          // ═════════════════════════════════════════════════════════
-          // SLIVER APPBAR PREMIUM con header expandible
-          // ═════════════════════════════════════════════════════════
-          SliverAppBar(
-            expandedHeight: 240,
-            pinned: true,
-            backgroundColor: color,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            iconTheme: const IconThemeData(color: Colors.white),
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                'Q$numeroQ',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
-                ),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      color,
-                      color.withValues(alpha: 0.85),
-                      Color.lerp(color, Colors.black, 0.3)!,
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // Círculos decorativos
-                    Positioned(
-                      right: -50,
-                      top: -50,
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.08),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: -30,
-                      bottom: -30,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.05),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 30,
-                      bottom: 70,
-                      child: Icon(
-                        Icons.sports_soccer_rounded,
-                        size: 90,
-                        color: Colors.white.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    // Contenido (FIX L41: padding reducido + número Q más pequeño)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 60, 20, 50),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text(
-                                numeroQ,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 64,
-                                  fontWeight: FontWeight.w900,
-                                  height: 1,
-                                  letterSpacing: -2,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'JORNADA',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 3,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      widget.quiniela.nombre.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.5,
-                                        height: 1.1,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          // Badge estado
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _iconoEstado,
-                                  size: 14,
-                                  color: _colorEstado,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  widget.quiniela.estado.etiqueta.toUpperCase(),
-                                  style: TextStyle(
-                                    color: _colorEstado,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.flash_on_rounded,
+              color: ProganaColors.midnight,
+              size: 20,
             ),
-          ),
-
-          // ═════════════════════════════════════════════════════════
-          // BODY - SLIVER LIST con secciones
-          // ═════════════════════════════════════════════════════════
-          SliverList(
-            delegate: SliverChildListDelegate([
-              // Sección: Descripción
-              if (widget.quiniela.descripcion != null)
-                _SeccionDescripcion(
-                  descripcion: widget.quiniela.descripcion!,
-                ),
-
-              // Sección: Información clave
-              _SeccionInformacion(
-                quiniela: widget.quiniela,
-                colorBanner: color,
-                formatearFecha: _formatearFechaCompleta,
+            const SizedBox(width: 8),
+            Text(
+              'INSCRIBIRME',
+              style: GoogleFonts.archivoBlack(
+                color: ProganaColors.midnight,
+                fontSize: 13,
+                letterSpacing: 1.5,
               ),
-
-              // Sección: Partidos
-              _SeccionPartidos(
-                futurePartidos: _futurePartidos,
-                colorBanner: color,
-                formatearFecha: _formatearFechaCorta,
-                formatearHora: _formatearHora,
-                onReintentar: _cargarPartidos,
-              ),
-
-              // CTA inferior — botón dinámico de inscripción
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: _construirBotonInscripcion(color),
-              ),
-              const SizedBox(height: 20),
-            ]),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// SECCIÓN: Descripción
-// ═══════════════════════════════════════════════════════════════════
-class _SeccionDescripcion extends StatelessWidget {
-  final String descripcion;
-
-  const _SeccionDescripcion({required this.descripcion});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEF1F4), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                size: 18,
-                color: AppColors.grisMedio,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'ACERCA DE',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.grisMedio,
-                  letterSpacing: 2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            descripcion,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.grisOscuro,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// SECCIÓN: Información clave
-// ═══════════════════════════════════════════════════════════════════
-class _SeccionInformacion extends StatelessWidget {
-  final Quiniela quiniela;
-  final Color colorBanner;
-  final String Function(DateTime) formatearFecha;
-
-  const _SeccionInformacion({
-    required this.quiniela,
-    required this.colorBanner,
-    required this.formatearFecha,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEF1F4), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.event_rounded,
-                size: 18,
-                color: AppColors.grisMedio,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'INFORMACIÓN',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.grisMedio,
-                  letterSpacing: 2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _InfoRow(
-            icon: Icons.login_rounded,
-            etiqueta: 'Inscripciones',
-            valor: formatearFecha(quiniela.aperturaInscripcion),
-            color: colorBanner,
-          ),
-          if (quiniela.cierreInscripcion != null) ...[
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.lock_clock_rounded,
-              etiqueta: 'Cierre',
-              valor: formatearFecha(quiniela.cierreInscripcion!),
-              color: colorBanner,
             ),
           ],
-          const SizedBox(height: 12),
-          _InfoRow(
-            icon: Icons.flag_rounded,
-            etiqueta: 'Primer partido',
-            valor: formatearFecha(quiniela.fechaPrimerPartido),
-            color: colorBanner,
-          ),
-          const SizedBox(height: 12),
-          _InfoRow(
-            icon: Icons.emoji_events_rounded,
-            etiqueta: 'Último partido',
-            valor: formatearFecha(quiniela.fechaUltimoPartido),
-            color: colorBanner,
-          ),
-          const SizedBox(height: 16),
-          Container(height: 1, color: const Color(0xFFEEF1F4)),
-          const SizedBox(height: 16),
-          // Métricas
-          Row(
-            children: [
-              Expanded(
-                child: _MetricaItem(
-                  icon: Icons.people_alt_rounded,
-                  valor: '${quiniela.totalInscritos}',
-                  etiqueta: 'INSCRITOS',
-                  color: colorBanner,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _MetricaItem(
-                  icon: Icons.fact_check_rounded,
-                  valor: '${quiniela.totalPredicciones}',
-                  etiqueta: 'PREDICCIONES',
-                  color: colorBanner,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
-}
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String etiqueta;
-  final String valor;
-  final Color color;
+  // ===========================================================================
+  // PARTIDOS LIST
+  // ===========================================================================
 
-  const _InfoRow({
-    required this.icon,
-    required this.etiqueta,
-    required this.valor,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, size: 16, color: color),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            etiqueta,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.grisMedio,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        Text(
-          valor,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.grisOscuro,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MetricaItem extends StatelessWidget {
-  final IconData icon;
-  final String valor;
-  final String etiqueta;
-  final Color color;
-
-  const _MetricaItem({
-    required this.icon,
-    required this.valor,
-    required this.etiqueta,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildPartidosHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 6),
-              Text(
-                valor,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
           Text(
-            etiqueta,
-            style: const TextStyle(
-              fontSize: 9,
-              color: AppColors.grisMedio,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+            'PARTIDOS',
+            style: GoogleFonts.archivoBlack(
+              color: ProganaColors.cream,
+              fontSize: 13,
+              letterSpacing: 1,
             ),
+          ),
+          FutureBuilder<List<Partido>>(
+            future: _futurePartidos,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const SizedBox.shrink();
+              final cant = snapshot.data!.length;
+              return Text(
+                '$cant PARTIDOS',
+                style: GoogleFonts.jetBrainsMono(
+                  color: ProganaColors.gold,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.8,
+                ),
+              );
+            },
           ),
         ],
       ),
     );
   }
-}
 
-// ═══════════════════════════════════════════════════════════════════
-// SECCIÓN: Lista de partidos
-// ═══════════════════════════════════════════════════════════════════
-class _SeccionPartidos extends StatelessWidget {
-  final Future<List<Partido>> futurePartidos;
-  final Color colorBanner;
-  final String Function(DateTime) formatearFecha;
-  final String Function(DateTime) formatearHora;
-  final VoidCallback onReintentar;
-
-  const _SeccionPartidos({
-    required this.futurePartidos,
-    required this.colorBanner,
-    required this.formatearFecha,
-    required this.formatearHora,
-    required this.onReintentar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildPartidosList() {
     return FutureBuilder<List<Partido>>(
-      future: futurePartidos,
+      future: _futurePartidos,
       builder: (context, snapshot) {
-        // Header de la sección (siempre visible)
-        Widget header(int? cantidad) => Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.sports_soccer_rounded,
-                    size: 18,
-                    color: AppColors.grisMedio,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'PARTIDOS',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.grisMedio,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (cantidad != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorBanner.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '$cantidad ${cantidad == 1 ? "partido" : "partidos"}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: colorBanner,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            );
-
-        // Loading
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Column(
-            children: [
-              header(null),
-              const Padding(
-                padding: EdgeInsets.all(40),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.verdeMexicano,
-                  ),
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: ProganaColors.gold,
+                  strokeWidth: 3,
                 ),
               ),
-            ],
+            ),
           );
         }
 
-        // Error
         if (snapshot.hasError) {
-          return Column(
-            children: [
-              header(null),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.error_outline_rounded,
-                      size: 48,
-                      color: AppColors.error,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '${snapshot.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.grisMedio,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: onReintentar,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Reintentar'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          return SliverToBoxAdapter(
+            child: _buildErrorPartidos(snapshot.error),
           );
         }
 
         final partidos = snapshot.data ?? [];
 
-        // Vacío
         if (partidos.isEmpty) {
-          return Column(
-            children: [
-              header(0),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.calendar_today_rounded,
-                      size: 48,
-                      color: AppColors.grisMedio,
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Partidos por definir',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.grisMedio,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
+          return SliverToBoxAdapter(child: _buildEmptyPartidos());
         }
 
-        // Lista de partidos
-        return Column(
-          children: [
-            header(partidos.length),
-            ...partidos.map((p) => _PartidoCard(
-                  partido: p,
-                  colorBanner: colorBanner,
-                  formatearFecha: formatearFecha,
-                  formatearHora: formatearHora,
-                )),
-          ],
+        return SliverList.builder(
+          itemCount: partidos.length,
+          itemBuilder: (context, index) => _buildMatchRow(partidos[index]),
         );
       },
     );
   }
-}
 
-// ═══════════════════════════════════════════════════════════════════
-// Card individual de partido
-// ═══════════════════════════════════════════════════════════════════
-class _PartidoCard extends StatelessWidget {
-  final Partido partido;
-  final Color colorBanner;
-  final String Function(DateTime) formatearFecha;
-  final String Function(DateTime) formatearHora;
+  Widget _buildMatchRow(Partido p) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Colors.white.withValues(alpha: 0.04),
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            _buildDayLabel(p),
+            const SizedBox(width: 12),
+            Expanded(child: _buildTeamsLabel(p)),
+            const SizedBox(width: 8),
+            _buildPredictionLabel(p),
+          ],
+        ),
+      ),
+    );
+  }
 
-  const _PartidoCard({
-    required this.partido,
-    required this.colorBanner,
-    required this.formatearFecha,
-    required this.formatearHora,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final local = partido.equipoLocal;
-    final visit = partido.equipoVisit;
-
+  Widget _buildDayLabel(Partido p) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      padding: const EdgeInsets.all(16),
+      width: 48,
+      padding: const EdgeInsets.only(right: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEF1F4), width: 1),
+        border: Border(
+          right: BorderSide(
+            color: ProganaColors.gold.withValues(alpha: 0.15),
+          ),
+        ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Header: número partido + fecha + hora
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: colorBanner.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '#${partido.numeroPartido}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: colorBanner,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                formatearFecha(partido.fechaHora),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.grisOscuro,
-                ),
-              ),
-              const Spacer(),
-              Icon(
-                Icons.schedule_rounded,
-                size: 13,
-                color: AppColors.grisMedio,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                formatearHora(partido.fechaHora),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.grisMedio,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Equipos vs
-          Row(
-            children: [
-              // Local
-              Expanded(
-                child: _EquipoLado(
-                  emoji: local?.emojiBandera ?? '⚽',
-                  codigo: local?.codigo ?? 'TBD',
-                  nombre: local?.nombre ?? 'Por definir',
-                  alineacion: CrossAxisAlignment.center,
-                ),
-              ),
-              // Marcador / VS
-              SizedBox(
-                width: 70,
-                child: Column(
-                  children: [
-                    if (partido.estado.yaFinalizo &&
-                        partido.golesLocal != null)
-                      Text(
-                        partido.marcador,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.grisOscuro,
-                        ),
-                      )
-                    else
-                      const Text(
-                        'VS',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.grisMedio,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    if (partido.estado.yaFinalizo)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.grisMedio.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'FINAL',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.grisMedio,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      )
-                    else if (partido.estado == EstadoPartido.enJuego)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.error,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'EN VIVO',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              // Visit
-              Expanded(
-                child: _EquipoLado(
-                  emoji: visit?.emojiBandera ?? '⚽',
-                  codigo: visit?.codigo ?? 'TBD',
-                  nombre: visit?.nombre ?? 'Por definir',
-                  alineacion: CrossAxisAlignment.center,
-                ),
-              ),
-            ],
-          ),
-          // Ubicación (si existe)
-          if (partido.ciudad != null) ...[
-            const SizedBox(height: 12),
-            Container(height: 1, color: const Color(0xFFEEF1F4)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  Icons.location_on_rounded,
-                  size: 13,
-                  color: AppColors.grisMedio,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  partido.ciudad!,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.grisMedio,
-                  ),
-                ),
-                if (partido.estadio != null) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    '· ${partido.estadio}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.grisMedio,
-                    ),
-                  ),
-                ],
-              ],
+          Text(
+            p.fechaHora.day.toString(),
+            style: GoogleFonts.archivoBlack(
+              color: ProganaColors.cream,
+              fontSize: 18,
+              height: 1,
             ),
-          ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _mesAbreviado(p.fechaHora.month),
+            style: GoogleFonts.jetBrainsMono(
+              color: ProganaColors.gold,
+              fontSize: 8,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 1.2,
+            ),
+          ),
         ],
       ),
     );
   }
-}
 
-class _EquipoLado extends StatelessWidget {
-  final String emoji;
-  final String codigo;
-  final String nombre;
-  final CrossAxisAlignment alineacion;
+  Widget _buildTeamsLabel(Partido p) {
+    // Usa el modelo REAL: equipoLocal.emojiBandera, equipoLocal.codigo, etc.
+    final local = p.equipoLocal;
+    final visit = p.equipoVisit;
 
-  const _EquipoLado({
-    required this.emoji,
-    required this.codigo,
-    required this.nombre,
-    required this.alineacion,
-  });
+    final localFlag = local?.emojiBandera ?? '🏳️';
+    final visitFlag = visit?.emojiBandera ?? '🏳️';
+    final localCode = local?.codigo ?? 'TBD';
+    final visitCode = visit?.codigo ?? 'TBD';
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: alineacion,
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 32)),
-        const SizedBox(height: 6),
-        Text(
-          codigo,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: AppColors.grisOscuro,
-            letterSpacing: 1,
+    return RichText(
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$localFlag ',
+            style: const TextStyle(fontSize: 14),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          nombre,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppColors.grisMedio,
-            fontWeight: FontWeight.w500,
+          TextSpan(
+            text: localCode,
+            style: GoogleFonts.outfit(
+              color: ProganaColors.cream,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+          TextSpan(
+            text: '  vs  ',
+            style: GoogleFonts.outfit(
+              color: ProganaColors.creamDim,
+              fontSize: 10,
+            ),
+          ),
+          TextSpan(
+            text: '$visitFlag ',
+            style: const TextStyle(fontSize: 14),
+          ),
+          TextSpan(
+            text: visitCode,
+            style: GoogleFonts.outfit(
+              color: ProganaColors.cream,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  Widget _buildPredictionLabel(Partido p) {
+    // Si el partido ya finalizó y hay marcador, mostrarlo
+    if (p.estado.yaFinalizo && p.golesLocal != null) {
+      return Text(
+        p.marcador,
+        style: GoogleFonts.jetBrainsMono(
+          color: ProganaColors.gold,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    // Si está en juego
+    if (p.estado == EstadoPartido.enJuego) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: ProganaColors.crimson,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          'EN VIVO',
+          style: GoogleFonts.jetBrainsMono(
+            color: ProganaColors.cream,
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+          ),
+        ),
+      );
+    }
+
+    // Si el usuario NO está inscrito o no hay predicción aún
+    // (Fase 2 traerá las predicciones reales del usuario)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: _miInscripcion != null
+              ? ProganaColors.gold.withValues(alpha: 0.5)
+              : ProganaColors.creamDim.withValues(alpha: 0.3),
+        ),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        _miInscripcion != null ? 'SIN PRED' : 'PENDIENTE',
+        style: GoogleFonts.jetBrainsMono(
+          color: _miInscripcion != null
+              ? ProganaColors.gold
+              : ProganaColors.creamDim,
+          fontSize: 8,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ESTADOS EMPTY / ERROR
+  // ===========================================================================
+
+  Widget _buildEmptyPartidos() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          children: [
+            Opacity(
+              opacity: 0.3,
+              child: Text('⚽', style: GoogleFonts.outfit(fontSize: 48)),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'SIN PARTIDOS AÚN',
+              style: GoogleFonts.archivoBlack(
+                color: ProganaColors.cream,
+                fontSize: 14,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Los partidos de esta quiniela aparecerán aquí pronto.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                color: ProganaColors.creamDim,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorPartidos(Object? error) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: ProganaColors.crimson.withValues(alpha: 0.1),
+              border: Border.all(color: ProganaColors.crimson),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                const Text('⚠️', style: TextStyle(fontSize: 28)),
+                const SizedBox(height: 8),
+                Text(
+                  'ERROR CARGANDO PARTIDOS',
+                  style: GoogleFonts.archivoBlack(
+                    color: ProganaColors.crimson,
+                    fontSize: 12,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  error?.toString() ?? 'Error desconocido',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    color: ProganaColors.creamDim,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _cargarPartidos,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ProganaColors.gold,
+              foregroundColor: ProganaColors.midnight,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 10,
+              ),
+            ),
+            child: Text(
+              'REINTENTAR',
+              style: GoogleFonts.archivoBlack(
+                fontSize: 11,
+                letterSpacing: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _mesAbreviado(int mes) {
+    const meses = [
+      '', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
+    ];
+    return meses[mes];
+  }
+}
+
+// =============================================================================
+// CUSTOM PAINTER — Pattern diagonal 45° sutil en el header
+// =============================================================================
+
+class _DiagonalPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.02)
+      ..strokeWidth = 8;
+
+    const spacing = 16.0;
+    final diagonal = size.width + size.height;
+
+    for (double i = -size.height; i < diagonal; i += spacing) {
+      canvas.drawLine(
+        Offset(i, 0),
+        Offset(i + size.height, size.height),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
