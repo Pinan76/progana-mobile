@@ -32,6 +32,7 @@ import '../models/partido.dart';
 import '../repository/partido_repository.dart';
 import '../../inscripciones/models/inscripcion.dart';
 import '../../inscripciones/repository/inscripcion_repository.dart';
+import '../../predicciones/screens/predict_marcador_screen.dart';
 
 class DetalleQuinielaScreen extends StatefulWidget {
   final Quiniela quiniela;
@@ -731,26 +732,84 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
   Widget _buildMatchRow(Partido p) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.white.withValues(alpha: 0.04),
+      child: GestureDetector(
+        onTap: () => _handleTapPartido(p),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.white.withValues(alpha: 0.04),
+              ),
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            _buildDayLabel(p),
-            const SizedBox(width: 12),
-            Expanded(child: _buildTeamsLabel(p)),
-            const SizedBox(width: 8),
-            _buildPredictionLabel(p),
-          ],
+          child: Row(
+            children: [
+              _buildDayLabel(p),
+              const SizedBox(width: 12),
+              Expanded(child: _buildTeamsLabel(p)),
+              const SizedBox(width: 8),
+              _buildPredictionLabel(p),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: ProganaColors.gold.withValues(alpha: 0.4),
+                size: 18,
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // ===========================================================================
+  // HANDLE TAP PARTIDO — Navegar a Predict Marcador
+  // ===========================================================================
+
+  Future<void> _handleTapPartido(Partido p) async {
+    // Validación 1: usuario debe estar inscrito
+    if (_miInscripcion == null) {
+      _showSnackBar(
+        'Debes inscribirte primero para predecir',
+        ProganaColors.gold,
+      );
+      return;
+    }
+
+    // Validación 2: partido debe permitir predicciones
+    if (!p.estado.permitePredecir) {
+      _showSnackBar(
+        'Este partido ya cerró predicciones',
+        ProganaColors.crimson,
+      );
+      return;
+    }
+
+    // Validación 3: equipos deben estar definidos
+    if (!p.tieneEquiposDefinidos) {
+      _showSnackBar(
+        'Los equipos de este partido aún no están definidos',
+        ProganaColors.gold,
+      );
+      return;
+    }
+
+    // Navegar a Predict Marcador
+    final resultado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PredictMarcadorScreen(
+          quiniela: widget.quiniela,
+          partido: p,
+        ),
+      ),
+    );
+
+    // Si guardó predicción, refrescar UI (recargar inscripción para actualizar conteo)
+    if (resultado == true && mounted) {
+      _verificarMiInscripcion();
+    }
   }
 
   Widget _buildDayLabel(Partido p) {
