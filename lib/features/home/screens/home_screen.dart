@@ -30,6 +30,7 @@ import '../../../core/theme/progana_theme.dart';
 import '../../quinielas/models/quiniela.dart';
 import '../../quinielas/repository/quiniela_repository.dart';
 import '../../quinielas/screens/lista_quinielas_screen.dart';
+import '../../tier/screens/tier_upgrade_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -364,23 +365,50 @@ class _HomeScreenState extends State<HomeScreen> {
         color = ProganaColors.grey;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        border: Border.all(color: color),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        _userTier,
-        style: GoogleFonts.jetBrainsMono(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.5,
+    return GestureDetector(
+      onTap: _navigateToTierUpgrade,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          border: Border.all(color: color),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _userTier,
+              style: GoogleFonts.jetBrainsMono(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: color,
+              size: 8,
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  // ===========================================================================
+  // NAVIGATE TO TIER UPGRADE
+  // ===========================================================================
+
+  Future<void> _navigateToTierUpgrade() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const TierUpgradeScreen()),
+    );
+    // Recargar tier al volver (en caso de que upgrade)
+    _loadData();
   }
 
   // ===========================================================================
