@@ -22,10 +22,16 @@
 //   ✓ Lista partidos compacta: día | equipos | predicción
 //   ✓ Dialog éxito midnight2 + check dorado
 //
+// FASE 2 (4 jun 2026 - Día 9 PM):
+//   ✓ Carga predicciones del usuario para esta quiniela
+//   ✓ Badge "PREDICHO ✓" verde emerald en partidos ya predichos
+//   ✓ Recarga al volver de PredictMarcadorScreen
+//
 // =============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/progana_theme.dart';
 import '../models/quiniela.dart';
 import '../models/partido.dart';
@@ -53,11 +59,15 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
   bool _verificandoInscripcion = true;
   bool _procesandoInscripcion = false;
 
+  // Fase 2 (Día 9): Predicciones del usuario para esta quiniela
+  Set<int> _partidosPredichos = {};
+
   @override
   void initState() {
     super.initState();
     _cargarPartidos();
     _verificarMiInscripcion();
+    _cargarMisPredicciones();
   }
 
   // ===========================================================================
@@ -85,6 +95,34 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
       if (mounted) {
         setState(() => _verificandoInscripcion = false);
       }
+    }
+  }
+
+  // ===========================================================================
+  // FASE 2 (Día 9): Cargar predicciones del usuario para esta quiniela
+  // ===========================================================================
+
+  Future<void> _cargarMisPredicciones() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final response = await supabase
+          .from('predicciones')
+          .select('partido_id')
+          .eq('user_id', userId)
+          .eq('quiniela_id', widget.quiniela.id);
+
+      final ids = (response as List)
+          .map((p) => (p as Map)['partido_id'] as int)
+          .toSet();
+
+      if (mounted) {
+        setState(() => _partidosPredichos = ids);
+      }
+    } catch (_) {
+      // Silently fail (no crítico para visualización)
     }
   }
 
@@ -806,9 +844,10 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
       ),
     );
 
-    // Si guardó predicción, refrescar UI (recargar inscripción para actualizar conteo)
+    // Si guardó predicción, refrescar UI (recargar inscripción y predicciones)
     if (resultado == true && mounted) {
       _verificarMiInscripcion();
+      _cargarMisPredicciones();
     }
   }
 
@@ -932,8 +971,39 @@ class _DetalleQuinielaScreenState extends State<DetalleQuinielaScreen> {
       );
     }
 
+    // FASE 2 (Día 9): Badge "PREDICHO ✓" verde si el user ya predijo este partido
+    if (_miInscripcion != null && _partidosPredichos.contains(p.id)) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: ProganaColors.emerald.withValues(alpha: 0.15),
+          border: Border.all(color: ProganaColors.emerald),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_rounded,
+              color: ProganaColors.emerald,
+              size: 10,
+            ),
+            const SizedBox(width: 2),
+            Text(
+              'PREDICHO',
+              style: GoogleFonts.jetBrainsMono(
+                color: ProganaColors.emerald,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     // Si el usuario NO está inscrito o no hay predicción aún
-    // (Fase 2 traerá las predicciones reales del usuario)
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
