@@ -15,16 +15,19 @@
 //
 // FASE 1 — Esqueleto Midnight Stadium con datos parcialmente reales:
 //   ✓ Avatar + nombre + tier (reales si profiles existe)
-//   ✓ Next Match Card con countdown HARDCODED (Fase 2: query real)
-//   ✓ Equipos México vs Sudáfrica REALES (verificado FIFA 11 jun 2026)
 //   ✓ Lista de quinielas REAL desde Supabase
 //   ✓ Bottom nav funcional (HOME + QUINIELAS + RANKING + PERFIL navegan real)
 //   ✓ Tier badge tappable → TierUpgradeScreen
 //
 // POLISH 4 JUN 2026 (Día 9 PM):
 //   ✓ Ribbon "PRÓXIMO" (acortado de "PRÓXIMO PARTIDO" para no cortarse)
-//   ✓ Banderas REALES: México vs Sudáfrica (FIFA confirmado, no Argentina)
-//   ✓ Meta info: "ESTADIO AZTECA" (nombre histórico, neutro, sin marcas)
+//
+// FASE 2 4 JUN 2026 (Día 9 PM — Next Match dinámico):
+//   ✓ Query directa Supabase: próximo partido programado
+//   ✓ Countdown calculado desde fecha_cierre_predicciones REAL
+//   ✓ Banderas, equipos, estadio, fecha desde BD (no hardcoded)
+//   ✓ Fallbacks robustos: si no hay partido, no crash
+//   ✓ Helper _flagFromCode: mapeo código equipo → emoji bandera (24 selecciones)
 //
 // =============================================================================
 
@@ -59,6 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Quiniela> _misQuinielas = [];
   Map<int, int> _partidosCount = {};
 
+  // === FASE 2 (4 jun): Próximo partido desde BD ===
+  Map<String, dynamic>? _proximoPartido;
+
   // === ESTADO ===
   bool _isLoading = true;
   String? _errorMessage;
@@ -66,12 +72,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // === COUNTDOWN ===
   Timer? _countdownTimer;
-  Duration _timeRemaining = const Duration(hours: 2, minutes: 14, seconds: 33);
+  Duration? _timeRemaining;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _cargarProximoPartido();
     _startCountdown();
   }
 
@@ -167,7 +174,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===========================================================================
-  // COUNTDOWN LIVE (Fase 1: hardcoded, Fase 2: calculado desde fecha real)
+  // FASE 2 (Día 9): Cargar próximo partido desde BD
+  // ===========================================================================
+
+  Future<void> _cargarProximoPartido() async {
+    try {
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+
+      final response = await _supabase
+          .from('partidos')
+          .select(
+            'id, fecha_hora, fecha_cierre_predicciones, ciudad, estadio, '
+            'equipo_local:equipos!equipo_local_id(codigo, nombre), '
+            'equipo_visit:equipos!equipo_visit_id(codigo, nombre)',
+          )
+          .gt('fecha_hora', nowIso)
+          .eq('estado', 'programado')
+          .order('fecha_hora', ascending: true)
+          .limit(1)
+          .maybeSingle();
+
+      if (mounted) {
+        setState(() => _proximoPartido = response);
+      }
+    } catch (_) {
+      // Silently fail (fallback visual mostrará "Sin partido próximo")
+    }
+  }
+
+  // ===========================================================================
+  // COUNTDOWN LIVE — Calculado desde fecha_cierre_predicciones (Fase 2)
   // ===========================================================================
 
   void _startCountdown() {
@@ -175,9 +211,21 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       setState(() {
-        if (_timeRemaining.inSeconds > 0) {
-          _timeRemaining = _timeRemaining - const Duration(seconds: 1);
+        final partido = _proximoPartido;
+        if (partido == null) {
+          _timeRemaining = null;
+          return;
         }
+
+        final cierreStr = partido['fecha_cierre_predicciones'] as String?;
+        if (cierreStr == null) {
+          _timeRemaining = null;
+          return;
+        }
+
+        final cierre = DateTime.parse(cierreStr);
+        final diff = cierre.difference(DateTime.now());
+        _timeRemaining = diff.isNegative ? Duration.zero : diff;
       });
     });
   }
@@ -190,11 +238,66 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===========================================================================
+  // HELPERS FASE 2 — Mapeo código equipo → emoji bandera
+  // ===========================================================================
+
+  String _flagFromCode(String? code) {
+    // Mapeo de los 24 códigos FIFA usados en Q1 (Jornada 1 grupos)
+    const flags = {
+      // Grupo A
+      'MEX': '🇲🇽', 'RSA': '🇿🇦', 'KOR': '🇰🇷', 'CZE': '🇨🇿',
+      // Grupo B
+      'CAN': '🇨🇦', 'BIH': '🇧🇦', 'QAT': '🇶🇦', 'SUI': '🇨🇭',
+      // Grupo C
+      'BRA': '🇧🇷', 'MAR': '🇲🇦', 'HAI': '🇭🇹', 'SCO': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+      // Grupo D
+      'USA': '🇺🇸', 'PAR': '🇵🇾', 'AUS': '🇦🇺', 'TUR': '🇹🇷',
+      // Grupo E
+      'GER': '🇩🇪', 'CUW': '🇨🇼', 'CIV': '🇨🇮', 'ECU': '🇪🇨',
+      // Grupo F
+      'NED': '🇳🇱', 'JPN': '🇯🇵', 'SWE': '🇸🇪', 'TUN': '🇹🇳',
+      // Grupo G
+      'BEL': '🇧🇪', 'EGY': '🇪🇬', 'IRN': '🇮🇷', 'NZL': '🇳🇿',
+      // Grupo H
+      'ESP': '🇪🇸', 'CPV': '🇨🇻', 'KSA': '🇸🇦', 'URU': '🇺🇾',
+      // Grupo I
+      'FRA': '🇫🇷', 'SEN': '🇸🇳', 'IRQ': '🇮🇶', 'NOR': '🇳🇴',
+      // Grupo J
+      'ARG': '🇦🇷', 'ALG': '🇩🇿', 'AUT': '🇦🇹', 'JOR': '🇯🇴',
+      // Grupo K
+      'POR': '🇵🇹', 'COD': '🇨🇩', 'UZB': '🇺🇿', 'COL': '🇨🇴',
+      // Grupo L
+      'ENG': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'CRO': '🇭🇷', 'GHA': '🇬🇭', 'PAN': '🇵🇦',
+    };
+    return flags[code] ?? '🏳️';
+  }
+
+  String _nombreEquipo(String? code) {
+    // Mapeo código → nombre en español (display HomeScreen)
+    const nombres = {
+      'MEX': 'MÉXICO', 'RSA': 'SUDÁFRICA', 'KOR': 'COREA', 'CZE': 'CHEQUIA',
+      'CAN': 'CANADÁ', 'BIH': 'BOSNIA', 'QAT': 'QATAR', 'SUI': 'SUIZA',
+      'BRA': 'BRASIL', 'MAR': 'MARRUECOS', 'HAI': 'HAITÍ', 'SCO': 'ESCOCIA',
+      'USA': 'USA', 'PAR': 'PARAGUAY', 'AUS': 'AUSTRALIA', 'TUR': 'TURQUÍA',
+      'GER': 'ALEMANIA', 'CUW': 'CURAZAO', 'CIV': 'COSTA MARFIL', 'ECU': 'ECUADOR',
+      'NED': 'HOLANDA', 'JPN': 'JAPÓN', 'SWE': 'SUECIA', 'TUN': 'TÚNEZ',
+      'BEL': 'BÉLGICA', 'EGY': 'EGIPTO', 'IRN': 'IRÁN', 'NZL': 'N. ZELANDA',
+      'ESP': 'ESPAÑA', 'CPV': 'CABO VERDE', 'KSA': 'ARABIA S.', 'URU': 'URUGUAY',
+      'FRA': 'FRANCIA', 'SEN': 'SENEGAL', 'IRQ': 'IRAK', 'NOR': 'NORUEGA',
+      'ARG': 'ARGENTINA', 'ALG': 'ARGELIA', 'AUT': 'AUSTRIA', 'JOR': 'JORDANIA',
+      'POR': 'PORTUGAL', 'COD': 'RD CONGO', 'UZB': 'UZBEKISTÁN', 'COL': 'COLOMBIA',
+      'ENG': 'INGLATERRA', 'CRO': 'CROACIA', 'GHA': 'GHANA', 'PAN': 'PANAMÁ',
+    };
+    return nombres[code] ?? code ?? 'TBD';
+  }
+
+  // ===========================================================================
   // ACTIONS
   // ===========================================================================
 
   Future<void> _handleRefresh() async {
     await _loadData();
+    await _cargarProximoPartido();
   }
 
   void _navigateToQuinielas() {
@@ -246,6 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _currentNavIndex = 0);
           // Recargar datos (en caso de cambio de tier en Tier Upgrade)
           _loadData();
+          _cargarProximoPartido();
         }
       });
     }
@@ -502,11 +606,74 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===========================================================================
-  // NEXT MATCH CARD — Card "PRÓXIMO" con countdown LIVE
-  // México vs Sudáfrica - 11 jun 2026 - Estadio Azteca (verificado FIFA)
+  // NEXT MATCH CARD — FASE 2: Datos dinámicos desde BD
   // ===========================================================================
 
   Widget _buildNextMatchCard() {
+    final partido = _proximoPartido;
+
+    // Fallback: si no hay próximo partido en BD
+    if (partido == null) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [ProganaColors.midnight2, ProganaColors.midnight3],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(
+            color: ProganaColors.gold.withValues(alpha: 0.2),
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Text(
+              'CARGANDO PRÓXIMO PARTIDO...',
+              style: GoogleFonts.jetBrainsMono(
+                color: ProganaColors.creamDim,
+                fontSize: 10,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                color: ProganaColors.gold,
+                strokeWidth: 2,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Extraer datos del partido
+    final local = partido['equipo_local'] as Map<String, dynamic>?;
+    final visit = partido['equipo_visit'] as Map<String, dynamic>?;
+    final localCode = local?['codigo'] as String?;
+    final visitCode = visit?['codigo'] as String?;
+    final estadio = partido['estadio'] as String?;
+    final ciudad = partido['ciudad'] as String?;
+    final fechaHoraStr = partido['fecha_hora'] as String?;
+
+    // Parsear fecha
+    String diaMes = '— —';
+    if (fechaHoraStr != null) {
+      try {
+        final fecha = DateTime.parse(fechaHoraStr).toLocal();
+        diaMes = '${fecha.day} ${_mesAbreviado(fecha.month)}';
+      } catch (_) {}
+    }
+
+    // Construir meta info: "DIA MES · ESTADIO" o fallback a ciudad
+    final ubicacion = estadio?.toUpperCase() ?? ciudad?.toUpperCase() ?? 'TBD';
+    final metaInfo = '$diaMes · $ubicacion';
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       decoration: BoxDecoration(
@@ -555,7 +722,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Countdown
+                  // Countdown LIVE (calculado desde fecha_cierre_predicciones)
                   Row(
                     children: [
                       const Icon(
@@ -565,7 +732,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'CIERRA EN ${_formatCountdown(_timeRemaining)}',
+                        _timeRemaining != null
+                            ? 'CIERRA EN ${_formatCountdown(_timeRemaining!)}'
+                            : 'CALCULANDO...',
                         style: GoogleFonts.jetBrainsMono(
                           color: ProganaColors.gold,
                           fontSize: 10,
@@ -577,10 +746,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Equipos REALES: México vs Sudáfrica (FIFA 11 jun 2026)
+                  // Equipos DINÁMICOS desde BD
                   Row(
                     children: [
-                      _buildTeamColumn('🇲🇽', 'MÉXICO'),
+                      _buildTeamColumn(
+                        _flagFromCode(localCode),
+                        _nombreEquipo(localCode),
+                      ),
                       Text(
                         'VS',
                         style: GoogleFonts.archivoBlack(
@@ -589,7 +761,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           letterSpacing: 2,
                         ),
                       ),
-                      _buildTeamColumn('🇿🇦', 'SUDÁFRICA'),
+                      _buildTeamColumn(
+                        _flagFromCode(visitCode),
+                        _nombreEquipo(visitCode),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -601,19 +776,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Meta info (Estadio Azteca confirmado FIFA)
+                  // Meta info DINÁMICA: "DIA MES · ESTADIO"
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '11 JUN · ESTADIO AZTECA',
-                        style: GoogleFonts.jetBrainsMono(
-                          color: ProganaColors.creamDim,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 1.5,
+                      Expanded(
+                        child: Text(
+                          metaInfo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            color: ProganaColors.creamDim,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 1.5,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         '▸ APERTURA',
                         style: GoogleFonts.jetBrainsMono(
@@ -662,6 +842,8 @@ class _HomeScreenState extends State<HomeScreen> {
               color: ProganaColors.cream,
               fontSize: 13,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
