@@ -31,6 +31,9 @@ import '../../quinielas/models/quiniela.dart';
 import '../../quinielas/repository/quiniela_repository.dart';
 import '../../quinielas/screens/lista_quinielas_screen.dart';
 import '../../tier/screens/tier_upgrade_screen.dart';
+import '../../profile/screens/profile_screen.dart';
+import '../../ranking/screens/ranking_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -209,44 +212,40 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onNavTap(int index) {
     setState(() => _currentNavIndex = index);
 
-    if (index == 1) {
-      // Tab "QUINIELAS"
-      _navigateToQuinielas();
-      // Reset al volver
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) setState(() => _currentNavIndex = 0);
-      });
-    } else if (index != 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Tab ${_navLabel(index)} próximamente'),
-          backgroundColor: ProganaColors.midnight3,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 1),
-        ),
-      );
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) setState(() => _currentNavIndex = 0);
-      });
+    if (index == 0) {
+      // Ya estás en HOME, no hacer nada
+      return;
     }
-  }
 
-  String _navLabel(int index) {
+    // Navegar al tab correspondiente
+    Widget? destination;
     switch (index) {
-      case 0:
-        return 'HOME';
       case 1:
-        return 'QUINIELAS';
+        destination = const ListaQuinielasScreen();
+        break;
       case 2:
-        return 'RANKING';
+        destination = const RankingScreen();
+        break;
       case 3:
-        return 'PERFIL';
-      default:
-        return '';
+        destination = const ProfileScreen();
+        break;
+    }
+
+    if (destination != null) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => destination!))
+          .then((_) {
+        // Reset al volver
+        if (mounted) {
+          setState(() => _currentNavIndex = 0);
+          // Recargar datos (en caso de cambio de tier en Tier Upgrade)
+          _loadData();
+        }
+      });
     }
   }
 
-  // ===========================================================================
+    // ===========================================================================
   // BUILD PRINCIPAL
   // ===========================================================================
 
