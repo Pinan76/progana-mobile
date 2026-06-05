@@ -2,7 +2,7 @@
 // PROGANA Fantasy — HomeScreen (Feed Principal Midnight Stadium)
 // =============================================================================
 //
-// L41 COMPLIANT (correcciones aplicadas 30 may 2026):
+// L41 COMPLIANT (correcciones aplicadas 30 may 2026, polish 4 jun 2026):
 //   ✓ Imports correctos: repository/ singular + lista_quinielas_screen.dart
 //   ✓ QuinielaRepository (singular)
 //   ✓ obtenerTodasQuinielas() (no getAllQuinielas)
@@ -16,9 +16,15 @@
 // FASE 1 — Esqueleto Midnight Stadium con datos parcialmente reales:
 //   ✓ Avatar + nombre + tier (reales si profiles existe)
 //   ✓ Next Match Card con countdown HARDCODED (Fase 2: query real)
-//   ✓ Equipos México vs Argentina HARDCODED (Fase 2: real)
+//   ✓ Equipos México vs Sudáfrica REALES (verificado FIFA 11 jun 2026)
 //   ✓ Lista de quinielas REAL desde Supabase
-//   ✓ Bottom nav funcional (HOME + QUINIELAS funcionan, RANKING + PERFIL placeholder)
+//   ✓ Bottom nav funcional (HOME + QUINIELAS + RANKING + PERFIL navegan real)
+//   ✓ Tier badge tappable → TierUpgradeScreen
+//
+// POLISH 4 JUN 2026 (Día 9 PM):
+//   ✓ Ribbon "PRÓXIMO" (acortado de "PRÓXIMO PARTIDO" para no cortarse)
+//   ✓ Banderas REALES: México vs Sudáfrica (FIFA confirmado, no Argentina)
+//   ✓ Meta info: "ESTADIO AZTECA" (nombre histórico, neutro, sin marcas)
 //
 // =============================================================================
 
@@ -245,7 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-    // ===========================================================================
+  // ===========================================================================
   // BUILD PRINCIPAL
   // ===========================================================================
 
@@ -496,7 +502,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===========================================================================
-  // NEXT MATCH CARD — Card "PRÓXIMO PARTIDO" con countdown LIVE
+  // NEXT MATCH CARD — Card "PRÓXIMO" con countdown LIVE
+  // México vs Sudáfrica - 11 jun 2026 - Estadio Azteca (verificado FIFA)
   // ===========================================================================
 
   Widget _buildNextMatchCard() {
@@ -517,20 +524,20 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(15),
         child: Stack(
           children: [
-            // Ribbon "PRÓXIMO PARTIDO" diagonal
+            // Ribbon "PRÓXIMO" diagonal (acortado para que no se corte)
             Positioned(
-              top: 12,
-              right: -42,
+              top: 14,
+              right: -32,
               child: Transform.rotate(
                 angle: 0.785, // 45°
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 36,
+                    horizontal: 28,
                     vertical: 4,
                   ),
                   color: ProganaColors.gold,
                   child: Text(
-                    'PRÓXIMO PARTIDO',
+                    'PRÓXIMO',
                     style: GoogleFonts.jetBrainsMono(
                       color: ProganaColors.midnight,
                       fontSize: 8,
@@ -570,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Equipos
+                  // Equipos REALES: México vs Sudáfrica (FIFA 11 jun 2026)
                   Row(
                     children: [
                       _buildTeamColumn('🇲🇽', 'MÉXICO'),
@@ -582,7 +589,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           letterSpacing: 2,
                         ),
                       ),
-                      _buildTeamColumn('🇦🇷', 'ARGENTINA'),
+                      _buildTeamColumn('🇿🇦', 'SUDÁFRICA'),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -594,12 +601,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Meta info
+                  // Meta info (Estadio Azteca confirmado FIFA)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '11 JUN · 14:00 CDMX',
+                        '11 JUN · ESTADIO AZTECA',
                         style: GoogleFonts.jetBrainsMono(
                           color: ProganaColors.creamDim,
                           fontSize: 9,
