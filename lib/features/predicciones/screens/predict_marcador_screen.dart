@@ -1,5 +1,5 @@
 // =============================================================================
-// PROGANA Fantasy — PredictMarcadorScreen (Plus/Pro)
+// PROGANA Fantasy — PredictMarcadorScreen (Free / Plus / Pro)
 // =============================================================================
 //
 // L41 COMPLIANT (3 jun 2026 - Día 8):
@@ -19,9 +19,16 @@
 //   ✓ AppBar minimalista con back + título
 //   ✓ Countdown LIVE crimson con efecto pulse
 //   ✓ Match showcase: banderas grandes + nombres
-//   ✓ Score selector dorado con +/-
-//   ✓ Card "PRO Próximamente" para Goleador
+//   ✓ Score selector dorado con +/- (Plus/Pro)
+//   ✓ Card "PRO Próximamente" para Goleador (Plus/Pro)
 //   ✓ Botón GUARDAR dorado con estados
+//
+// FASE 2 4 JUN 2026 (Día 9 PM — Vista condicional por tier):
+//   ✓ Free: 3 botones LOCAL / EMPATE / VISITANTE (L/E/V)
+//   ✓ Plus/Pro: Selector marcador exacto +/- (UI original)
+//   ✓ Goleador card oculto para Free
+//   ✓ Dialog éxito adaptado: Free muestra "RESULTADO: LOCAL"
+//   ✓ Repository ya soporta ambos flujos (golesLocal/Visit nullable + resultado opcional)
 //
 // =============================================================================
 
@@ -53,11 +60,17 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   final _repo = PrediccionRepository();
   final _supabase = Supabase.instance.client;
 
-  // === DATOS ===
+  // === DATOS Plus/Pro (marcador exacto) ===
   int _golesLocal = 0;
   int _golesVisit = 0;
   int _golesLocalOriginal = 0;
   int _golesVisitOriginal = 0;
+
+  // === DATOS Free (L/E/V) ===
+  String? _resultadoSeleccionado;
+  String? _resultadoOriginal;
+
+  // === COMÚN ===
   Prediccion? _miPrediccion;
   TierAlPredecir _miTier = TierAlPredecir.free;
 
@@ -110,10 +123,14 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
 
       if (prediccion != null) {
         _miPrediccion = prediccion;
+        // Para Plus/Pro: cargar marcador
         _golesLocal = prediccion.predLocal ?? 0;
         _golesVisit = prediccion.predVisit ?? 0;
         _golesLocalOriginal = _golesLocal;
         _golesVisitOriginal = _golesVisit;
+        // Para Free: cargar resultado L/E/V
+        _resultadoSeleccionado = prediccion.predResultado;
+        _resultadoOriginal = prediccion.predResultado;
       }
 
       // 3. Calcular countdown desde fechaCierrePredicciones
@@ -162,7 +179,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   // ===========================================================================
-  // ACTIONS
+  // ACTIONS — Plus/Pro (marcador)
   // ===========================================================================
 
   void _incrementLocal() {
@@ -181,34 +198,80 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     if (_golesVisit > 0) setState(() => _golesVisit--);
   }
 
-  bool get _hasChanges =>
-      _golesLocal != _golesLocalOriginal ||
-      _golesVisit != _golesVisitOriginal;
+  // ===========================================================================
+  // ACTIONS — Free (L/E/V)
+  // ===========================================================================
+
+  void _seleccionarResultado(String resultado) {
+    setState(() => _resultadoSeleccionado = resultado);
+  }
+
+  // ===========================================================================
+  // ESTADO BUTTON / VALIDACIONES
+  // ===========================================================================
+
+  bool get _hasChanges {
+    if (_miTier == TierAlPredecir.free) {
+      return _resultadoSeleccionado != _resultadoOriginal;
+    }
+    // Plus/Pro
+    return _golesLocal != _golesLocalOriginal ||
+        _golesVisit != _golesVisitOriginal;
+  }
 
   bool get _puedePredecir =>
       _timeRemaining.inSeconds > 0 &&
-      widget.partido.estado.permitePredecir &&
-      _miTier.puedeMarcador;
+      widget.partido.estado.permitePredecir;
+
+  bool get _tieneValorParaGuardar {
+    if (_miTier == TierAlPredecir.free) {
+      return _resultadoSeleccionado != null;
+    }
+    // Plus/Pro siempre tienen valor (default 0-0)
+    return true;
+  }
+
+  // ===========================================================================
+  // GUARDAR PREDICCIÓN
+  // ===========================================================================
 
   Future<void> _guardarPrediccion() async {
-    if (_isSaving || !_puedePredecir) return;
+    if (_isSaving || !_puedePredecir || !_tieneValorParaGuardar) return;
 
     setState(() => _isSaving = true);
 
     try {
-      final prediccion = await _repo.guardarPrediccion(
-        partidoId: widget.partido.id,
-        quinielaId: widget.quiniela.id,
-        tier: _miTier,
-        golesLocal: _golesLocal,
-        golesVisit: _golesVisit,
-      );
+      late Prediccion prediccion;
+
+      if (_miTier == TierAlPredecir.free) {
+        // Free: solo resultado L/E/V
+        prediccion = await _repo.guardarPrediccion(
+          partidoId: widget.partido.id,
+          quinielaId: widget.quiniela.id,
+          tier: _miTier,
+          resultado: _resultadoSeleccionado,
+        );
+      } else {
+        // Plus/Pro: marcador exacto
+        prediccion = await _repo.guardarPrediccion(
+          partidoId: widget.partido.id,
+          quinielaId: widget.quiniela.id,
+          tier: _miTier,
+          golesLocal: _golesLocal,
+          golesVisit: _golesVisit,
+        );
+      }
 
       if (mounted) {
         setState(() {
           _miPrediccion = prediccion;
-          _golesLocalOriginal = _golesLocal;
-          _golesVisitOriginal = _golesVisit;
+          // Reset originales según tier
+          if (_miTier == TierAlPredecir.free) {
+            _resultadoOriginal = _resultadoSeleccionado;
+          } else {
+            _golesLocalOriginal = _golesLocal;
+            _golesVisitOriginal = _golesVisit;
+          }
           _isSaving = false;
         });
         _mostrarDialogExito();
@@ -252,6 +315,17 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   void _mostrarDialogExito() {
+    // Texto del marcador/resultado según tier
+    final String displayValor;
+    if (_miTier == TierAlPredecir.free) {
+      final etiqueta = ResultadoPartido.etiqueta(_resultadoSeleccionado ?? 'L');
+      displayValor = 'RESULTADO: ${etiqueta.toUpperCase()}';
+    } else {
+      final localCode = widget.partido.equipoLocal?.codigo ?? '?';
+      final visitCode = widget.partido.equipoVisit?.codigo ?? '?';
+      displayValor = '$localCode  $_golesLocal - $_golesVisit  $visitCode';
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -317,7 +391,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${widget.partido.equipoLocal?.codigo ?? "?"}  $_golesLocal - $_golesVisit  ${widget.partido.equipoVisit?.codigo ?? "?"}',
+                  displayValor,
                   style: GoogleFonts.jetBrainsMono(
                     color: ProganaColors.gold,
                     fontSize: 16,
@@ -444,6 +518,8 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   Widget _buildSuccessState() {
+    final esFree = _miTier == TierAlPredecir.free;
+
     return Column(
       children: [
         _buildAppBar(),
@@ -456,10 +532,17 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
                 const SizedBox(height: 24),
                 _buildMatchShowcase(),
                 const SizedBox(height: 32),
-                _buildScoreSelector(),
+                // Selector condicional según tier
+                if (esFree)
+                  _buildLEVSelector()
+                else
+                  _buildScoreSelector(),
                 const SizedBox(height: 24),
-                _buildGoleadorCard(),
-                const SizedBox(height: 32),
+                // Goleador card solo para Plus/Pro
+                if (!esFree) _buildGoleadorCard(),
+                if (!esFree) const SizedBox(height: 32),
+                // Para Free, espaciado equivalente
+                if (esFree) const SizedBox(height: 8),
                 _buildSubmitButton(),
                 const SizedBox(height: 24),
               ],
@@ -475,6 +558,10 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   // ===========================================================================
 
   Widget _buildAppBar() {
+    final titulo = _miTier == TierAlPredecir.free
+        ? 'PREDECIR RESULTADO'
+        : 'PREDECIR MARCADOR';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
@@ -508,7 +595,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
           ),
           const SizedBox(width: 12),
           Text(
-            'PREDECIR MARCADOR',
+            titulo,
             style: GoogleFonts.archivoBlack(
               color: ProganaColors.cream,
               fontSize: 13,
@@ -685,7 +772,182 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   // ===========================================================================
-  // SCORE SELECTOR
+  // L/E/V SELECTOR — Free Tier (FASE 2 Día 9)
+  // ===========================================================================
+
+  Widget _buildLEVSelector() {
+    final local = widget.partido.equipoLocal;
+    final visit = widget.partido.equipoVisit;
+    final localCode = local?.codigo ?? '?';
+    final visitCode = visit?.codigo ?? '?';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          Text(
+            'TU PREDICCIÓN',
+            style: GoogleFonts.jetBrainsMono(
+              color: ProganaColors.gold,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '¿QUIÉN GANARÁ?',
+            style: GoogleFonts.outfit(
+              color: ProganaColors.creamDim,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // 3 botones LOCAL / EMPATE / VISITANTE
+          Row(
+            children: [
+              Expanded(
+                child: _buildLEVButton(
+                  resultado: ResultadoPartido.local,
+                  label: 'LOCAL',
+                  subtext: localCode,
+                  emoji: local?.emojiBandera ?? '🏳️',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildLEVButton(
+                  resultado: ResultadoPartido.empate,
+                  label: 'EMPATE',
+                  subtext: 'X',
+                  emoji: '🤝',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildLEVButton(
+                  resultado: ResultadoPartido.visitante,
+                  label: 'VISIT.',
+                  subtext: visitCode,
+                  emoji: visit?.emojiBandera ?? '🏳️',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Hint upgrade Plus
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: ProganaColors.gold.withValues(alpha: 0.05),
+              border: Border.all(
+                color: ProganaColors.gold.withValues(alpha: 0.2),
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.lightbulb_outline_rounded,
+                  color: ProganaColors.gold,
+                  size: 14,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Con Plus: predice el marcador exacto (3 pts vs 1 pt)',
+                    style: GoogleFonts.outfit(
+                      color: ProganaColors.cream,
+                      fontSize: 10,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLEVButton({
+    required String resultado,
+    required String label,
+    required String subtext,
+    required String emoji,
+  }) {
+    final isSelected = _resultadoSeleccionado == resultado;
+    final isEnabled = _puedePredecir;
+
+    return GestureDetector(
+      onTap: isEnabled ? () => _seleccionarResultado(resultado) : null,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 110,
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? const LinearGradient(
+                  colors: [ProganaColors.gold, ProganaColors.goldDark],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: isSelected ? null : ProganaColors.midnight2,
+          border: Border.all(
+            color: isSelected
+                ? ProganaColors.goldBright
+                : ProganaColors.gold.withValues(alpha: 0.2),
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: ProganaColors.gold.withValues(alpha: 0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 28)),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: GoogleFonts.archivoBlack(
+                color: isSelected
+                    ? ProganaColors.midnight
+                    : ProganaColors.cream,
+                fontSize: 12,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtext,
+              style: GoogleFonts.jetBrainsMono(
+                color: isSelected
+                    ? ProganaColors.midnight.withValues(alpha: 0.7)
+                    : ProganaColors.creamDim,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SCORE SELECTOR — Plus/Pro Tier
   // ===========================================================================
 
   Widget _buildScoreSelector() {
@@ -822,7 +1084,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   // ===========================================================================
-  // GOLEADOR CARD — "PRO Próximamente" honesto
+  // GOLEADOR CARD — "PRO Próximamente" (solo Plus/Pro)
   // ===========================================================================
 
   Widget _buildGoleadorCard() {
@@ -955,28 +1217,6 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
       );
     }
 
-    // Estado: tier no permite marcador (free)
-    if (!_miTier.puedeMarcador) {
-      return Container(
-        width: double.infinity,
-        height: 52,
-        decoration: BoxDecoration(
-          color: ProganaColors.midnight2,
-          border: Border.all(color: ProganaColors.gold.withValues(alpha: 0.3)),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          'UPGRADE A PLUS PARA PREDECIR',
-          style: GoogleFonts.archivoBlack(
-            color: ProganaColors.gold,
-            fontSize: 13,
-            letterSpacing: 1.5,
-          ),
-        ),
-      );
-    }
-
     // Estado: saving
     if (_isSaving) {
       return Container(
@@ -993,6 +1233,28 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
           child: CircularProgressIndicator(
             color: ProganaColors.midnight,
             strokeWidth: 2.5,
+          ),
+        ),
+      );
+    }
+
+    // Estado: Free pero no ha seleccionado nada todavía
+    if (_miTier == TierAlPredecir.free && _resultadoSeleccionado == null) {
+      return Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: ProganaColors.midnight2,
+          border: Border.all(color: ProganaColors.gold.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          'SELECCIONA TU PREDICCIÓN',
+          style: GoogleFonts.archivoBlack(
+            color: ProganaColors.gold,
+            fontSize: 13,
+            letterSpacing: 1.5,
           ),
         ),
       );
