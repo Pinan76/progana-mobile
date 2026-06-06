@@ -11,6 +11,15 @@
 //   ✓ Constraint checks check_free_solo_resultado + check_pro_marcador respetados
 //   ✓ Maneja partidos cerrados (no permite predecir si estado != programado)
 //
+// FASE 2 - GOLEADOR (4 jun 2026 - Día 9 PM):
+//   ✓ Param goleadorPredichoId agregado a guardarPrediccion (opcional)
+//   ✓ Validación: Free NO puede pasar goleador (TierInvalidoException)
+//   ✓ Validación: Plus/Pro pueden pasar goleador (opcional)
+//   ✓ Manejo errores nuevos constraints:
+//     - check_free_no_goleador
+//     - check_goleador_sin_empate_cero
+//     - trg_validar_goleador_pertenece_partido (trigger raise)
+//
 // MÉTODOS:
 //   - obtenerMiPrediccion(partidoId, quinielaId): Future<Prediccion?>
 //   - guardarPrediccion({...}): Future<Prediccion>  ← UPSERT
@@ -65,9 +74,12 @@ class PrediccionRepository {
   /// La tabla tiene UNIQUE (user_id, partido_id, quiniela_id), por lo que
   /// usar UPSERT permite que la misma operación sirva para INSERT y UPDATE.
   ///
-  /// Para FREE: pasar [golesLocal] y [golesVisit] como null, [resultado] obligatorio
+  /// Para FREE: pasar [golesLocal] y [golesVisit] como null, [resultado] obligatorio.
+  ///            [goleadorPredichoId] DEBE ser null (Free no puede predecir goleador).
   /// Para PLUS/PRO: pasar [golesLocal] y [golesVisit] obligatorios.
   ///                [resultado] se calcula automáticamente a partir de los goles.
+  ///                [goleadorPredichoId] es OPCIONAL (Plus/Pro pueden o no predecirlo).
+  ///                Si predicción es 0-0, [goleadorPredichoId] DEBE ser null.
   ///
   /// Lanza:
   ///   - [TierInvalidoException] si los argumentos no son compatibles con el tier
@@ -79,6 +91,7 @@ class PrediccionRepository {
     int? golesLocal,
     int? golesVisit,
     String? resultado, // Solo para Free; Plus/Pro lo calcula auto
+    int? goleadorPredichoId, // Opcional, solo Plus/Pro
   }) async {
     // Validación de tier compatible con argumentos
     if (tier == TierAlPredecir.free) {
@@ -90,6 +103,12 @@ class PrediccionRepository {
       if (golesLocal != null || golesVisit != null) {
         throw const TierInvalidoException(
           'Free tier NO puede predecir marcador exacto',
+        );
+      }
+      // Free NO puede predecir goleador
+      if (goleadorPredichoId != null) {
+        throw const TierInvalidoException(
+          'Free tier NO puede predecir goleador',
         );
       }
     } else {
@@ -104,6 +123,12 @@ class PrediccionRepository {
       }
       if (golesVisit < 0 || golesVisit > 20) {
         throw const TierInvalidoException('Goles visit fuera de rango (0-20)');
+      }
+      // Si predicción es 0-0, goleador debe ser null (regla negocio + constraint BD)
+      if (golesLocal == 0 && golesVisit == 0 && goleadorPredichoId != null) {
+        throw const TierInvalidoException(
+          'No puedes predecir goleador en un empate sin goles (0-0)',
+        );
       }
     }
 
@@ -131,6 +156,7 @@ class PrediccionRepository {
               'pred_visit': golesVisit,
               'pred_resultado': resultadoFinal,
               'tier_al_predecir': tier.value,
+              'goleador_predicho_id': goleadorPredichoId,
               // fecha_prediccion, created_at, updated_at se llenan por DB defaults
             },
             onConflict: 'user_id,partido_id,quiniela_id',
@@ -145,6 +171,23 @@ class PrediccionRepository {
           e.message.contains('check_free_solo_resultado')) {
         throw const TierInvalidoException(
           'Tu tier no permite este tipo de predicción',
+        );
+      }
+      // Errores específicos de goleador (Fase 2)
+      if (e.message.contains('check_free_no_goleador')) {
+        throw const TierInvalidoException(
+          'Free tier NO puede predecir goleador',
+        );
+      }
+      if (e.message.contains('check_goleador_sin_empate_cero')) {
+        throw const TierInvalidoException(
+          'No puedes predecir goleador en un empate sin goles (0-0)',
+        );
+      }
+      // Trigger goleador no pertenece al partido (RAISE EXCEPTION en plpgsql)
+      if (e.message.contains('no pertenece al partido')) {
+        throw const TierInvalidoException(
+          'El goleador seleccionado no pertenece a ninguno de los 2 equipos',
         );
       }
       throw PrediccionException(

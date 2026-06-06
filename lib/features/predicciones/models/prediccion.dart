@@ -11,6 +11,12 @@
 //   ✓ UNIQUE constraint (user_id, partido_id, quiniela_id) → UPSERT behavior
 //   ✓ Helper estático calcularResultado() para que Plus/Pro lo calculen auto
 //
+// FASE 2 - GOLEADOR (4 jun 2026 - Día 9 PM):
+//   ✓ Campo goleadorPredichoId agregado (nullable INT, FK jugadores)
+//   ✓ Constraints BD nuevos: check_free_no_goleador, check_goleador_sin_empate_cero
+//   ✓ Trigger BD: trg_validar_goleador_pertenece_partido
+//   ✓ puedeGoleador actualizado: Plus + Pro (Reglamento v1.2)
+//
 // Estructura BD:
 //   id              uuid    DEFAULT uuid_generate_v4()
 //   user_id         uuid    NOT NULL FK profiles(id)
@@ -20,6 +26,7 @@
 //   pred_visit      int?    CHECK 0-20 (null para Free)
 //   pred_resultado  char    CHECK ['L','E','V'] OBLIGATORIO
 //   tier_al_predecir tier_usuario NOT NULL ('free'/'plus'/'pro')
+//   goleador_predicho_id int? FK jugadores(id) NULL (solo Plus/Pro)
 //   fecha_prediccion timestamp DEFAULT now()
 //   created_at, updated_at
 //
@@ -59,8 +66,9 @@ enum TierAlPredecir {
   bool get puedeMarcador =>
       this == TierAlPredecir.plus || this == TierAlPredecir.pro;
 
-  /// Tiers que pueden predecir goleador (placeholder post-Mundial)
-  bool get puedeGoleador => this == TierAlPredecir.pro;
+  /// Tiers que pueden predecir goleador (Reglamento v1.2: Plus + Pro)
+  bool get puedeGoleador =>
+      this == TierAlPredecir.plus || this == TierAlPredecir.pro;
 }
 
 /// Resultado de un partido (Local / Empate / Visitante)
@@ -102,6 +110,7 @@ class Prediccion {
   final int? predVisit;          // null para Free
   final String predResultado;    // 'L', 'E', 'V' (siempre)
   final TierAlPredecir tierAlPredecir;
+  final int? goleadorPredichoId; // FK jugadores.id (solo Plus/Pro, nullable)
   final DateTime fechaPrediccion;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -115,6 +124,7 @@ class Prediccion {
     this.predVisit,
     required this.predResultado,
     required this.tierAlPredecir,
+    this.goleadorPredichoId,
     required this.fechaPrediccion,
     required this.createdAt,
     required this.updatedAt,
@@ -133,6 +143,7 @@ class Prediccion {
       tierAlPredecir: TierAlPredecir.fromString(
         json['tier_al_predecir'] as String,
       ),
+      goleadorPredichoId: json['goleador_predicho_id'] as int?,
       fechaPrediccion: DateTime.parse(json['fecha_prediccion'] as String),
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -145,6 +156,9 @@ class Prediccion {
 
   /// Si la predicción tiene marcador exacto (Plus/Pro)
   bool get tieneMarcadorExacto => predLocal != null && predVisit != null;
+
+  /// Si la predicción tiene goleador (solo Plus/Pro pueden tenerlo)
+  bool get tieneGoleador => goleadorPredichoId != null;
 
   /// Marcador display: "2 - 1" o "—"
   String get marcadorDisplay {
@@ -161,10 +175,12 @@ class Prediccion {
 
   @override
   String toString() {
+    final goleadorStr = tieneGoleador ? ', goleador=$goleadorPredichoId' : '';
     return 'Prediccion(partido=$partidoId, '
         'marcador=$marcadorDisplay, '
         'resultado=$predResultado, '
-        'tier=${tierAlPredecir.value})';
+        'tier=${tierAlPredecir.value}'
+        '$goleadorStr)';
   }
 }
 

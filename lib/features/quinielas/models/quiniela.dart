@@ -6,6 +6,7 @@
 /// Enums confirmados:
 /// - estado_quiniela: {borrador, inscripcion, activa, finalizada, cancelada}
 /// - tipo_quiniela: {oficial_progana, privada_promotor}
+library;
 
 /// Estado del ciclo de vida de una quiniela
 enum EstadoQuiniela {
