@@ -30,6 +30,14 @@
 //   ✓ Dialog éxito adaptado: Free muestra "RESULTADO: LOCAL"
 //   ✓ Repository ya soporta ambos flujos (golesLocal/Visit nullable + resultado opcional)
 //
+// FASE 3 4 JUN 2026 (Día 9 PM — Goleador funcional):
+//   ✓ Plus/Pro: Selector goleador con 2 tabs (local | visit), 52 jugadores
+//   ✓ Lazy load: jugadores solo se cargan si tier puedeGoleador
+//   ✓ Fallback robusto: si BD falla, muestra card "PRÓXIMAMENTE"
+//   ✓ Constraint: si predicción es 0-0, goleador se resetea automáticamente
+//   ✓ Re-edit: carga goleadorPredichoId de predicción existente
+//   ✓ Dialog éxito muestra nombre del goleador si fue seleccionado
+//
 // =============================================================================
 
 import 'dart:async';
@@ -39,6 +47,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/progana_theme.dart';
 import '../../quinielas/models/quiniela.dart';
 import '../../quinielas/models/partido.dart';
+import '../../quinielas/models/jugador.dart';
+import '../../quinielas/repository/jugador_repository.dart';
 import '../models/prediccion.dart';
 import '../repository/prediccion_repository.dart';
 
@@ -58,6 +68,7 @@ class PredictMarcadorScreen extends StatefulWidget {
 
 class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   final _repo = PrediccionRepository();
+  final _jugadorRepo = JugadorRepository();
   final _supabase = Supabase.instance.client;
 
   // === DATOS Plus/Pro (marcador exacto) ===
@@ -69,6 +80,15 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   // === DATOS Free (L/E/V) ===
   String? _resultadoSeleccionado;
   String? _resultadoOriginal;
+
+  // === DATOS Goleador (Plus/Pro, opcional) - Fase 3 Día 9 PM ===
+  List<Jugador> _jugadoresLocal = [];
+  List<Jugador> _jugadoresVisit = [];
+  int? _goleadorSeleccionadoId;
+  int? _goleadorOriginalId;
+  int _tabGoleadorIndex = 0; // 0 = local, 1 = visit
+  bool _jugadoresCargados = false;
+  bool _jugadoresError = false;
 
   // === COMÚN ===
   Prediccion? _miPrediccion;
@@ -131,11 +151,20 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
         // Para Free: cargar resultado L/E/V
         _resultadoSeleccionado = prediccion.predResultado;
         _resultadoOriginal = prediccion.predResultado;
+        // Goleador (Plus/Pro, opcional)
+        _goleadorSeleccionadoId = prediccion.goleadorPredichoId;
+        _goleadorOriginalId = prediccion.goleadorPredichoId;
       }
 
       // 3. Calcular countdown desde fechaCierrePredicciones
       _calcularCountdown();
       _startCountdown();
+
+      // 4. Cargar jugadores SOLO si tier puede goleador (Plus/Pro)
+      // Lazy fire-and-forget: no bloquea la pantalla
+      if (_miTier.puedeGoleador) {
+        _cargarJugadoresPartido();
+      }
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -145,6 +174,47 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
         setState(() {
           _isLoading = false;
           _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  // ===========================================================================
+  // FASE 3 (Día 9 PM): Cargar jugadores del partido
+  // ===========================================================================
+
+  Future<void> _cargarJugadoresPartido() async {
+    final local = widget.partido.equipoLocal;
+    final visit = widget.partido.equipoVisit;
+
+    // Si los equipos no están definidos aún, no se puede cargar
+    if (local == null || visit == null) {
+      if (mounted) {
+        setState(() => _jugadoresError = true);
+      }
+      return;
+    }
+
+    try {
+      final resultado = await _jugadorRepo.obtenerJugadoresDelPartido(
+        equipoLocalId: local.id,
+        equipoVisitId: visit.id,
+      );
+
+      if (mounted) {
+        setState(() {
+          _jugadoresLocal = resultado.local;
+          _jugadoresVisit = resultado.visit;
+          _jugadoresCargados = true;
+          _jugadoresError = false;
+        });
+      }
+    } catch (_) {
+      // Si falla, fallback al card "PRÓXIMAMENTE"
+      if (mounted) {
+        setState(() {
+          _jugadoresCargados = false;
+          _jugadoresError = true;
         });
       }
     }
@@ -183,19 +253,47 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   // ===========================================================================
 
   void _incrementLocal() {
-    if (_golesLocal < 20) setState(() => _golesLocal++);
+    if (_golesLocal < 20) {
+      setState(() {
+        _golesLocal++;
+        _resetGoleadorSiEmpateCero();
+      });
+    }
   }
 
   void _decrementLocal() {
-    if (_golesLocal > 0) setState(() => _golesLocal--);
+    if (_golesLocal > 0) {
+      setState(() {
+        _golesLocal--;
+        _resetGoleadorSiEmpateCero();
+      });
+    }
   }
 
   void _incrementVisit() {
-    if (_golesVisit < 20) setState(() => _golesVisit++);
+    if (_golesVisit < 20) {
+      setState(() {
+        _golesVisit++;
+        _resetGoleadorSiEmpateCero();
+      });
+    }
   }
 
   void _decrementVisit() {
-    if (_golesVisit > 0) setState(() => _golesVisit--);
+    if (_golesVisit > 0) {
+      setState(() {
+        _golesVisit--;
+        _resetGoleadorSiEmpateCero();
+      });
+    }
+  }
+
+  /// Si la predicción quedó en 0-0, resetea goleador automáticamente
+  /// (constraint BD: check_goleador_sin_empate_cero)
+  void _resetGoleadorSiEmpateCero() {
+    if (_golesLocal == 0 && _golesVisit == 0) {
+      _goleadorSeleccionadoId = null;
+    }
   }
 
   // ===========================================================================
@@ -207,6 +305,35 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   // ===========================================================================
+  // ACTIONS — Goleador (Plus/Pro, opcional)
+  // ===========================================================================
+
+  void _seleccionarGoleador(int jugadorId) {
+    setState(() {
+      // Toggle: si ya estaba seleccionado, deseleccionar
+      _goleadorSeleccionadoId =
+          _goleadorSeleccionadoId == jugadorId ? null : jugadorId;
+    });
+  }
+
+  void _cambiarTabGoleador(int index) {
+    setState(() => _tabGoleadorIndex = index);
+  }
+
+  /// Obtiene el nombre del jugador goleador seleccionado (para dialog éxito)
+  String? _nombreGoleadorSeleccionado() {
+    if (_goleadorSeleccionadoId == null) return null;
+    final todos = [..._jugadoresLocal, ..._jugadoresVisit];
+    try {
+      final jugador =
+          todos.firstWhere((j) => j.id == _goleadorSeleccionadoId);
+      return jugador.nombre;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ===========================================================================
   // ESTADO BUTTON / VALIDACIONES
   // ===========================================================================
 
@@ -214,9 +341,10 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     if (_miTier == TierAlPredecir.free) {
       return _resultadoSeleccionado != _resultadoOriginal;
     }
-    // Plus/Pro
+    // Plus/Pro: cambio en marcador O en goleador
     return _golesLocal != _golesLocalOriginal ||
-        _golesVisit != _golesVisitOriginal;
+        _golesVisit != _golesVisitOriginal ||
+        _goleadorSeleccionadoId != _goleadorOriginalId;
   }
 
   bool get _puedePredecir =>
@@ -229,6 +357,21 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     }
     // Plus/Pro siempre tienen valor (default 0-0)
     return true;
+  }
+
+  /// Si debe mostrar selector funcional de goleador (vs card placeholder)
+  bool get _mostrarSelectorGoleadorFuncional {
+    return _miTier.puedeGoleador &&
+        _jugadoresCargados &&
+        !_jugadoresError &&
+        (_jugadoresLocal.isNotEmpty || _jugadoresVisit.isNotEmpty);
+  }
+
+  /// Si el goleador puede ser seleccionado (no es 0-0)
+  bool get _goleadorEsSeleccionable {
+    if (!_puedePredecir) return false;
+    // Si la predicción es 0-0, goleador deshabilitado
+    return !(_golesLocal == 0 && _golesVisit == 0);
   }
 
   // ===========================================================================
@@ -244,7 +387,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
       late Prediccion prediccion;
 
       if (_miTier == TierAlPredecir.free) {
-        // Free: solo resultado L/E/V
+        // Free: solo resultado L/E/V (sin goleador)
         prediccion = await _repo.guardarPrediccion(
           partidoId: widget.partido.id,
           quinielaId: widget.quiniela.id,
@@ -252,13 +395,14 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
           resultado: _resultadoSeleccionado,
         );
       } else {
-        // Plus/Pro: marcador exacto
+        // Plus/Pro: marcador exacto + goleador opcional
         prediccion = await _repo.guardarPrediccion(
           partidoId: widget.partido.id,
           quinielaId: widget.quiniela.id,
           tier: _miTier,
           golesLocal: _golesLocal,
           golesVisit: _golesVisit,
+          goleadorPredichoId: _goleadorSeleccionadoId,
         );
       }
 
@@ -271,6 +415,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
           } else {
             _golesLocalOriginal = _golesLocal;
             _golesVisitOriginal = _golesVisit;
+            _goleadorOriginalId = _goleadorSeleccionadoId;
           }
           _isSaving = false;
         });
@@ -325,6 +470,9 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
       final visitCode = widget.partido.equipoVisit?.codigo ?? '?';
       displayValor = '$localCode  $_golesLocal - $_golesVisit  $visitCode';
     }
+
+    // Goleador (solo si Plus/Pro lo seleccionó)
+    final goleadorNombre = _nombreGoleadorSeleccionado();
 
     showDialog(
       context: context,
@@ -400,6 +548,36 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
                   ),
                 ),
               ),
+              // Goleador (si fue seleccionado - Fase 3)
+              if (goleadorNombre != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: ProganaColors.emerald.withValues(alpha: 0.15),
+                    border: Border.all(
+                      color: ProganaColors.emerald.withValues(alpha: 0.4),
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('⚽', style: TextStyle(fontSize: 12)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Goleador: $goleadorNombre',
+                        style: GoogleFonts.outfit(
+                          color: ProganaColors.emerald,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 'Puedes modificarla hasta el cierre de predicciones',
@@ -538,9 +716,14 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
                 else
                   _buildScoreSelector(),
                 const SizedBox(height: 24),
-                // Goleador card solo para Plus/Pro
-                if (!esFree) _buildGoleadorCard(),
-                if (!esFree) const SizedBox(height: 32),
+                // Goleador (Fase 3): selector funcional o card placeholder
+                if (!esFree) ...[
+                  if (_mostrarSelectorGoleadorFuncional)
+                    _buildGoleadorSelector()
+                  else
+                    _buildGoleadorCard(),
+                  const SizedBox(height: 32),
+                ],
                 // Para Free, espaciado equivalente
                 if (esFree) const SizedBox(height: 8),
                 _buildSubmitButton(),
@@ -1084,7 +1267,404 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
   }
 
   // ===========================================================================
-  // GOLEADOR CARD — "PRO Próximamente" (solo Plus/Pro)
+  // GOLEADOR SELECTOR — Plus/Pro Funcional (FASE 3 Día 9 PM)
+  // ===========================================================================
+
+  Widget _buildGoleadorSelector() {
+    final esEmpateCero = _golesLocal == 0 && _golesVisit == 0;
+    final goleadorActual = _nombreGoleadorSeleccionado();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Text('⚽', style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'GOLEADOR (+1 PT)',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: ProganaColors.gold,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2.5,
+                    ),
+                  ),
+                ],
+              ),
+              if (goleadorActual != null)
+                GestureDetector(
+                  onTap: _goleadorEsSeleccionable
+                      ? () => setState(() => _goleadorSeleccionadoId = null)
+                      : null,
+                  child: Text(
+                    'LIMPIAR',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: ProganaColors.creamDim,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            esEmpateCero
+                ? 'No disponible en empate sin goles'
+                : 'Opcional - elige quién anotará primero',
+            style: GoogleFonts.outfit(
+              color: esEmpateCero
+                  ? ProganaColors.crimson.withValues(alpha: 0.7)
+                  : ProganaColors.creamDim,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Si es empate 0-0, mostrar mensaje deshabilitado
+          if (esEmpateCero)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: ProganaColors.midnight2.withValues(alpha: 0.4),
+                border: Border.all(
+                  color: ProganaColors.crimson.withValues(alpha: 0.2),
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: ProganaColors.crimson,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cambia el marcador a algo distinto de 0-0 para elegir goleador.',
+                      style: GoogleFonts.outfit(
+                        color: ProganaColors.creamDim,
+                        fontSize: 10,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Tabs Local / Visit
+            _buildTabSelector(),
+            const SizedBox(height: 8),
+            // Lista de jugadores tab activa
+            _buildListaJugadores(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabSelector() {
+    final local = widget.partido.equipoLocal;
+    final visit = widget.partido.equipoVisit;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: ProganaColors.midnight2,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTabButton(
+              index: 0,
+              emoji: local?.emojiBandera ?? '🏳️',
+              codigo: local?.codigo ?? '?',
+              count: _jugadoresLocal.length,
+            ),
+          ),
+          Expanded(
+            child: _buildTabButton(
+              index: 1,
+              emoji: visit?.emojiBandera ?? '🏳️',
+              codigo: visit?.codigo ?? '?',
+              count: _jugadoresVisit.length,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton({
+    required int index,
+    required String emoji,
+    required String codigo,
+    required int count,
+  }) {
+    final isActive = _tabGoleadorIndex == index;
+    return GestureDetector(
+      onTap: () => _cambiarTabGoleador(index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          gradient: isActive
+              ? LinearGradient(
+                  colors: [
+                    ProganaColors.gold.withValues(alpha: 0.2),
+                    ProganaColors.gold.withValues(alpha: 0.05),
+                  ],
+                )
+              : null,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive
+                ? ProganaColors.gold
+                : Colors.transparent,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 2),
+            Text(
+              codigo,
+              style: GoogleFonts.archivoBlack(
+                color: isActive ? ProganaColors.gold : ProganaColors.cream,
+                fontSize: 12,
+                letterSpacing: 1,
+              ),
+            ),
+            Text(
+              '$count jugadores',
+              style: GoogleFonts.jetBrainsMono(
+                color: isActive
+                    ? ProganaColors.gold.withValues(alpha: 0.7)
+                    : ProganaColors.creamDim,
+                fontSize: 8,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListaJugadores() {
+    final lista =
+        _tabGoleadorIndex == 0 ? _jugadoresLocal : _jugadoresVisit;
+
+    // Banner clarificador L41 - Fase 3 Día 9 PM
+    final equipoActivo = _tabGoleadorIndex == 0
+        ? widget.partido.equipoLocal
+        : widget.partido.equipoVisit;
+    final emojiBanner = equipoActivo?.emojiBandera ?? '🏳️';
+    final nombreBanner =
+        equipoActivo?.nombre.toUpperCase() ?? 'EQUIPO';
+
+    if (lista.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        alignment: Alignment.center,
+        child: Text(
+          'Sin jugadores registrados',
+          style: GoogleFonts.outfit(
+            color: ProganaColors.creamDim,
+            fontSize: 11,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Banner clarificador del equipo activo
+        Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                ProganaColors.gold.withValues(alpha: 0.15),
+                ProganaColors.gold.withValues(alpha: 0.05),
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            border: Border(
+              left: BorderSide(
+                color: ProganaColors.gold,
+                width: 3,
+              ),
+            ),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
+          ),
+          child: Row(
+            children: [
+              Text(emojiBanner, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'JUGADORES DE $nombreBanner',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: ProganaColors.gold,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              Text(
+                '${lista.length}',
+                style: GoogleFonts.archivoBlack(
+                  color: ProganaColors.gold,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Lista scrollable con altura limitada (no expande infinito)
+        Container(
+          constraints: const BoxConstraints(maxHeight: 320),
+          decoration: BoxDecoration(
+            color: ProganaColors.midnight2.withValues(alpha: 0.4),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(10),
+              bottomRight: Radius.circular(10),
+            ),
+          ),
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: lista.length,
+            itemBuilder: (context, index) => _buildJugadorTile(lista[index]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJugadorTile(Jugador jugador) {
+    final isSelected = _goleadorSeleccionadoId == jugador.id;
+    final isEnabled = _goleadorEsSeleccionable;
+
+    return GestureDetector(
+      onTap: isEnabled ? () => _seleccionarGoleador(jugador.id) : null,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? LinearGradient(
+                  colors: [
+                    ProganaColors.gold.withValues(alpha: 0.25),
+                    ProganaColors.gold.withValues(alpha: 0.1),
+                  ],
+                )
+              : null,
+          border: Border.all(
+            color: isSelected
+                ? ProganaColors.gold
+                : Colors.transparent,
+          ),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            // Emoji posición
+            Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: ProganaColors.midnight3,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                jugador.emojiPosicion,
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Nombre + posición
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          jugador.nombre,
+                          style: GoogleFonts.outfit(
+                            color: isSelected
+                                ? ProganaColors.gold
+                                : ProganaColors.cream,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (jugador.esMaximaEstrella) ...[
+                        const SizedBox(width: 4),
+                        const Text('⭐', style: TextStyle(fontSize: 10)),
+                      ] else if (jugador.esEstrella) ...[
+                        const SizedBox(width: 4),
+                        const Text('✨', style: TextStyle(fontSize: 9)),
+                      ],
+                    ],
+                  ),
+                  Text(
+                    '${jugador.posicionDisplay} · ${jugador.golesCarrera}g',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: ProganaColors.creamDim,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Check si está seleccionado
+            if (isSelected)
+              const Icon(
+                Icons.check_circle_rounded,
+                color: ProganaColors.gold,
+                size: 18,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // GOLEADOR CARD — Fallback "PRO Próximamente" (si BD falla / Free)
   // ===========================================================================
 
   Widget _buildGoleadorCard() {
