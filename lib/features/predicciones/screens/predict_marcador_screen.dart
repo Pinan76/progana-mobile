@@ -38,6 +38,12 @@
 //   ✓ Re-edit: carga goleadorPredichoId de predicción existente
 //   ✓ Dialog éxito muestra nombre del goleador si fue seleccionado
 //
+// FASE 3.1 4 JUN 2026 (Día 9 PM — Anti-autogol L41):
+//   ✓ Regla: goleador debe ser del equipo que anotó >= 1 gol
+//   ✓ UI: jugadores del equipo sin gol aparecen deshabilitados (opacity 0.4)
+//   ✓ Banner contextual crimson cuando tab activo es equipo sin gol
+//   ✓ Auto-reset goleador si su equipo deja de anotar
+//
 // =============================================================================
 
 import 'dart:async';
@@ -256,7 +262,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     if (_golesLocal < 20) {
       setState(() {
         _golesLocal++;
-        _resetGoleadorSiEmpateCero();
+        _resetGoleadorSiEquipoNoAnoto();
       });
     }
   }
@@ -265,7 +271,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     if (_golesLocal > 0) {
       setState(() {
         _golesLocal--;
-        _resetGoleadorSiEmpateCero();
+        _resetGoleadorSiEquipoNoAnoto();
       });
     }
   }
@@ -274,7 +280,7 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     if (_golesVisit < 20) {
       setState(() {
         _golesVisit++;
-        _resetGoleadorSiEmpateCero();
+        _resetGoleadorSiEquipoNoAnoto();
       });
     }
   }
@@ -283,15 +289,40 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     if (_golesVisit > 0) {
       setState(() {
         _golesVisit--;
-        _resetGoleadorSiEmpateCero();
+        _resetGoleadorSiEquipoNoAnoto();
       });
     }
   }
 
-  /// Si la predicción quedó en 0-0, resetea goleador automáticamente
-  /// (constraint BD: check_goleador_sin_empate_cero)
-  void _resetGoleadorSiEmpateCero() {
+  /// Resetea goleador si su equipo dejó de anotar (regla anti-autogol L41 - Fase 3.1)
+  /// Cubre 2 casos:
+  ///   1. Empate 0-0: ningún equipo anotó → reset siempre
+  ///   2. Equipo del goleador con 0 goles → reset por anti-autogol
+  void _resetGoleadorSiEquipoNoAnoto() {
+    if (_goleadorSeleccionadoId == null) return;
+
+    // Caso 1: empate 0-0
     if (_golesLocal == 0 && _golesVisit == 0) {
+      _goleadorSeleccionadoId = null;
+      return;
+    }
+
+    // Caso 2: equipo del goleador no anotó
+    final todos = [..._jugadoresLocal, ..._jugadoresVisit];
+    Jugador? jugador;
+    try {
+      jugador = todos.firstWhere((j) => j.id == _goleadorSeleccionadoId);
+    } catch (_) {
+      jugador = null;
+    }
+    if (jugador == null) return;
+
+    final equipoLocalId = widget.partido.equipoLocal?.id;
+    final equipoVisitId = widget.partido.equipoVisit?.id;
+
+    if (jugador.equipoId == equipoLocalId && _golesLocal == 0) {
+      _goleadorSeleccionadoId = null;
+    } else if (jugador.equipoId == equipoVisitId && _golesVisit == 0) {
       _goleadorSeleccionadoId = null;
     }
   }
@@ -318,6 +349,26 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
 
   void _cambiarTabGoleador(int index) {
     setState(() => _tabGoleadorIndex = index);
+  }
+
+  /// Determina si un jugador puede ser seleccionado como goleador (Fase 3.1 L41)
+  /// Regla anti-autogol: su equipo debe haber anotado >= 1 gol
+  bool _jugadorEsSeleccionable(Jugador jugador) {
+    if (!_puedePredecir) return false;
+    if (_golesLocal == 0 && _golesVisit == 0) return false;
+
+    final equipoLocalId = widget.partido.equipoLocal?.id;
+    final equipoVisitId = widget.partido.equipoVisit?.id;
+
+    // Si jugador es del equipo local, local debe haber anotado
+    if (jugador.equipoId == equipoLocalId) {
+      return _golesLocal >= 1;
+    }
+    // Si jugador es del equipo visit, visit debe haber anotado
+    if (jugador.equipoId == equipoVisitId) {
+      return _golesVisit >= 1;
+    }
+    return false; // Defensive
   }
 
   /// Obtiene el nombre del jugador goleador seleccionado (para dialog éxito)
@@ -1274,6 +1325,12 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
     final esEmpateCero = _golesLocal == 0 && _golesVisit == 0;
     final goleadorActual = _nombreGoleadorSeleccionado();
 
+    // Fase 3.1: ¿el tab activo es del equipo que no anotó?
+    final tabEsLocal = _tabGoleadorIndex == 0;
+    final tabActivoSinGol = !esEmpateCero &&
+        ((tabEsLocal && _golesLocal == 0) ||
+            (!tabEsLocal && _golesVisit == 0));
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1365,6 +1422,41 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
             // Tabs Local / Visit
             _buildTabSelector(),
             const SizedBox(height: 8),
+            // Banner contextual L41 Fase 3.1: si tab activo es equipo sin gol
+            if (tabActivoSinGol) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ProganaColors.crimson.withValues(alpha: 0.1),
+                  border: Border.all(
+                    color: ProganaColors.crimson.withValues(alpha: 0.3),
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.block_rounded,
+                      color: ProganaColors.crimson,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Este equipo no anota goles en tu predicción',
+                        style: GoogleFonts.outfit(
+                          color: ProganaColors.crimson,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             // Lista de jugadores tab activa
             _buildListaJugadores(),
           ],
@@ -1566,98 +1658,102 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
 
   Widget _buildJugadorTile(Jugador jugador) {
     final isSelected = _goleadorSeleccionadoId == jugador.id;
-    final isEnabled = _goleadorEsSeleccionable;
+    final isEnabled = _jugadorEsSeleccionable(jugador);
 
-    return GestureDetector(
-      onTap: isEnabled ? () => _seleccionarGoleador(jugador.id) : null,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [
-                    ProganaColors.gold.withValues(alpha: 0.25),
-                    ProganaColors.gold.withValues(alpha: 0.1),
-                  ],
-                )
-              : null,
-          border: Border.all(
-            color: isSelected
-                ? ProganaColors.gold
-                : Colors.transparent,
-          ),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            // Emoji posición
-            Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: ProganaColors.midnight3,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                jugador.emojiPosicion,
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Nombre + posición
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          jugador.nombre,
-                          style: GoogleFonts.outfit(
-                            color: isSelected
-                                ? ProganaColors.gold
-                                : ProganaColors.cream,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (jugador.esMaximaEstrella) ...[
-                        const SizedBox(width: 4),
-                        const Text('⭐', style: TextStyle(fontSize: 10)),
-                      ] else if (jugador.esEstrella) ...[
-                        const SizedBox(width: 4),
-                        const Text('✨', style: TextStyle(fontSize: 9)),
-                      ],
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: isEnabled ? 1.0 : 0.4,
+      child: GestureDetector(
+        onTap: isEnabled ? () => _seleccionarGoleador(jugador.id) : null,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: isSelected
+                ? LinearGradient(
+                    colors: [
+                      ProganaColors.gold.withValues(alpha: 0.25),
+                      ProganaColors.gold.withValues(alpha: 0.1),
                     ],
-                  ),
-                  Text(
-                    '${jugador.posicionDisplay} · ${jugador.golesCarrera}g',
-                    style: GoogleFonts.jetBrainsMono(
-                      color: ProganaColors.creamDim,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
+                  )
+                : null,
+            border: Border.all(
+              color: isSelected
+                  ? ProganaColors.gold
+                  : Colors.transparent,
             ),
-            // Check si está seleccionado
-            if (isSelected)
-              const Icon(
-                Icons.check_circle_rounded,
-                color: ProganaColors.gold,
-                size: 18,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              // Emoji posición
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: ProganaColors.midnight3,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  jugador.emojiPosicion,
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
-          ],
+              const SizedBox(width: 10),
+              // Nombre + posición
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            jugador.nombre,
+                            style: GoogleFonts.outfit(
+                              color: isSelected
+                                  ? ProganaColors.gold
+                                  : ProganaColors.cream,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (jugador.esMaximaEstrella) ...[
+                          const SizedBox(width: 4),
+                          const Text('⭐', style: TextStyle(fontSize: 10)),
+                        ] else if (jugador.esEstrella) ...[
+                          const SizedBox(width: 4),
+                          const Text('✨', style: TextStyle(fontSize: 9)),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      '${jugador.posicionDisplay} · ${jugador.golesCarrera}g',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: ProganaColors.creamDim,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Check si está seleccionado
+              if (isSelected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: ProganaColors.gold,
+                  size: 18,
+                ),
+            ],
+          ),
         ),
       ),
     );
