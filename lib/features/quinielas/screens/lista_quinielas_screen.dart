@@ -21,6 +21,11 @@
 //   ✓ Pull-to-refresh dorado
 //   ✓ Cero verde/blanco residual
 //
+// FIX DÍA 10 PM 8 JUN 2026 (Pre-Mundial):
+//   ✓ _buildStatusPill: lógica hardcoded → q.statusLabel + q.statusColorKey (centralizado)
+//   ✓ Helper _colorFromKey mapea string → ProganaColors (consistente con HomeScreen)
+//   ✓ _mesAbreviado removido (lógica movida al modelo Quiniela)
+//
 // =============================================================================
 
 import 'package:flutter/material.dart';
@@ -426,29 +431,11 @@ class _ListaQuinielasScreenState extends State<ListaQuinielasScreen> {
     );
   }
 
+  /// FIX DÍA 10 PM (8 jun 2026): Usa quiniela.statusLabel + statusColorKey
+  /// Single source of truth en modelo Quiniela (compartido con HomeScreen)
   Widget _buildStatusPill(Quiniela quiniela) {
-    Color color;
-    String label;
-
-    if (quiniela.estaActivaAhora) {
-      color = ProganaColors.crimson;
-      label = 'EN VIVO';
-    } else if (quiniela.estado == EstadoQuiniela.inscripcion) {
-      color = ProganaColors.emerald;
-      label = 'ABIERTA';
-    } else if (quiniela.yaTermino) {
-      color = ProganaColors.grey;
-      label = 'FINAL';
-    } else if (quiniela.esPendiente &&
-        quiniela.estado == EstadoQuiniela.borrador) {
-      color = ProganaColors.gold;
-      final dia = quiniela.fechaPrimerPartido.day;
-      final mes = _mesAbreviado(quiniela.fechaPrimerPartido.month);
-      label = '$dia $mes';
-    } else {
-      color = ProganaColors.grey;
-      label = quiniela.estado.etiqueta.toUpperCase();
-    }
+    final color = _colorFromKey(quiniela.statusColorKey);
+    final label = quiniela.statusLabel;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -469,12 +456,19 @@ class _ListaQuinielasScreenState extends State<ListaQuinielasScreen> {
     );
   }
 
-  String _mesAbreviado(int mes) {
-    const meses = [
-      '', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
-    ];
-    return meses[mes];
+  /// FIX DÍA 10 PM (8 jun 2026): Mapping string key → ProganaColors
+  Color _colorFromKey(String key) {
+    switch (key) {
+      case 'crimson':
+        return ProganaColors.crimson;
+      case 'emerald':
+        return ProganaColors.emerald;
+      case 'gold':
+        return ProganaColors.gold;
+      case 'grey':
+      default:
+        return ProganaColors.grey;
+    }
   }
 
   // ===========================================================================

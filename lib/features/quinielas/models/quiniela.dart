@@ -2,6 +2,7 @@
 ///
 /// L41: Verificado contra information_schema 22 may 2026
 ///      Getters Midnight Stadium agregados 30 may 2026
+///      Status UI centralizado agregado 8 jun 2026 (Día 10)
 ///
 /// Enums confirmados:
 /// - estado_quiniela: {borrador, inscripcion, activa, finalizada, cancelada}
@@ -215,6 +216,40 @@ class Quiniela {
     if (estado == EstadoQuiniela.finalizada) return true;
     final ahora = DateTime.now();
     return ahora.isAfter(fechaUltimoPartido.add(const Duration(days: 1)));
+  }
+
+  // ===========================================================================
+  // STATUS UI CENTRALIZADO (Día 10 PM L41)
+  // Single source of truth para HomeScreen + ListaQuinielas + futuras pantallas
+  // ===========================================================================
+
+  /// Label del status pill UI (consistente entre todas las pantallas)
+  /// Resuelve "PRÓXIMA" vs "ABIERTA" vs fechas de forma centralizada.
+  String get statusLabel {
+    if (estaActivaAhora) return 'EN VIVO';
+    if (estado == EstadoQuiniela.inscripcion) return 'ABIERTA';
+    if (yaTermino) return 'FINAL';
+    if (esPendiente && estado == EstadoQuiniela.borrador) {
+      const meses = [
+        '', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+        'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
+      ];
+      final dia = fechaPrimerPartido.day;
+      final mes = meses[fechaPrimerPartido.month];
+      return '$dia $mes';
+    }
+    return estado.etiqueta.toUpperCase();
+  }
+
+  /// Clave de color del status pill (consistente entre pantallas)
+  /// Mapping a ProganaColors lo hace cada pantalla (helper _colorFromKey).
+  /// Valores: 'crimson', 'emerald', 'gold', 'grey'
+  String get statusColorKey {
+    if (estaActivaAhora) return 'crimson';
+    if (estado == EstadoQuiniela.inscripcion) return 'emerald';
+    if (yaTermino) return 'grey';
+    if (esPendiente && estado == EstadoQuiniela.borrador) return 'gold';
+    return 'grey';
   }
 
   @override

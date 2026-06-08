@@ -29,6 +29,11 @@
 //   ✓ Fallbacks robustos: si no hay partido, no crash
 //   ✓ Helper _flagFromCode: mapeo código equipo → emoji bandera (24 selecciones)
 //
+// FIX DÍA 10 PM 8 JUN 2026 (Pre-Mundial):
+//   ✓ _navigateToQuiniela: SnackBar mock → Navigator real a DetalleQuinielaScreen
+//   ✓ _buildStatusPill: lógica hardcoded → q.statusLabel + q.statusColorKey (centralizado)
+//   ✓ Helper _colorFromKey mapea string → ProganaColors
+//
 // =============================================================================
 
 import 'dart:async';
@@ -39,6 +44,7 @@ import '../../../core/theme/progana_theme.dart';
 import '../../quinielas/models/quiniela.dart';
 import '../../quinielas/repository/quiniela_repository.dart';
 import '../../quinielas/screens/lista_quinielas_screen.dart';
+import '../../quinielas/screens/detalle_quiniela_screen.dart';
 import '../../tier/screens/tier_upgrade_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../ranking/screens/ranking_screen.dart';
@@ -307,15 +313,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// FIX DÍA 10 PM (8 jun 2026): Navegación real a Detalle (antes SnackBar mock)
   void _navigateToQuiniela(Quiniela q) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Abrir: ${q.nombre}'),
-        backgroundColor: ProganaColors.midnight3,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    // TODO Fase 2: Navigator.push a DetalleQuinielaScreen(quiniela: q)
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => DetalleQuinielaScreen(quiniela: q),
+          ),
+        )
+        .then((_) {
+      // Recargar datos al volver (en caso de inscripción/cambio)
+      if (mounted) {
+        _loadData();
+      }
+    });
   }
 
   void _onNavTap(int index) {
@@ -1016,25 +1027,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// FIX DÍA 10 PM (8 jun 2026): Usa q.statusLabel + q.statusColorKey
+  /// Single source of truth en modelo Quiniela (compartido con ListaQuinielas)
   Widget _buildStatusPill(Quiniela q) {
-    Color color;
-    String label;
-
-    if (q.estaActivaAhora) {
-      color = ProganaColors.crimson;
-      label = 'EN VIVO';
-    } else if (q.estado == EstadoQuiniela.inscripcion) {
-      color = ProganaColors.emerald;
-      label = 'PRÓXIMA';
-    } else if (q.esPendiente) {
-      color = ProganaColors.grey;
-      final dia = q.fechaPrimerPartido.day;
-      final mes = _mesAbreviado(q.fechaPrimerPartido.month);
-      label = '$dia $mes';
-    } else {
-      color = ProganaColors.grey;
-      label = q.estado.etiqueta.toUpperCase();
-    }
+    final color = _colorFromKey(q.statusColorKey);
+    final label = q.statusLabel;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1053,6 +1050,21 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  /// FIX DÍA 10 PM (8 jun 2026): Mapping string key → ProganaColors
+  Color _colorFromKey(String key) {
+    switch (key) {
+      case 'crimson':
+        return ProganaColors.crimson;
+      case 'emerald':
+        return ProganaColors.emerald;
+      case 'gold':
+        return ProganaColors.gold;
+      case 'grey':
+      default:
+        return ProganaColors.grey;
+    }
   }
 
   String _mesAbreviado(int mes) {
