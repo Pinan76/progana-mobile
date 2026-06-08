@@ -4,14 +4,18 @@
 //
 // L41 COMPLIANT (4 jun 2026 - Día 9):
 //   ✓ Header "Ranking General · MUNDIAL 2026 · ACUMULADO"
-//   ✓ Podio top 3 (oro/plata/bronce) MOCK
-//   ✓ Lista posiciones 4-N MOCK
-//   ✓ Tu posición destacada (mock #147)
-//   ✓ Disclaimer claro "Datos de muestra. Real al iniciar Mundial 11 jun"
+//   ✓ Podio top 3 (oro/plata/bronce)
+//   ✓ Lista posiciones 4-N
+//   ✓ Tu posición destacada
 //   ✓ Compatible Flutter Web (sin dart:io)
 //
-// Honestidad L41: este es PLACEHOLDER porque sin partidos jugados no hay puntos.
-// Disclaimer hace transparente al sponsor que es mock.
+// REFACTOR DÍA 10 PM 8 JUN 2026 (Pre-Mundial):
+//   ✓ Mock → datos reales desde matview rankings_general
+//   ✓ RankingRepository + RankingEntry integrados
+//   ✓ FutureBuilder con 4 estados: loading / error / empty / success
+//   ✓ Estado vacío Opción A.1: CTA con conteo quinielas abiertas
+//   ✓ Botón "VER QUINIELAS" → navega ListaQuinielasScreen
+//   ✓ Disclaimer mock eliminado (BD es la verdad ahora)
 //
 // =============================================================================
 
@@ -19,6 +23,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/progana_theme.dart';
+import '../models/ranking_entry.dart';
+import '../repository/ranking_repository.dart';
+import '../../quinielas/screens/lista_quinielas_screen.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
@@ -28,48 +35,71 @@ class RankingScreen extends StatefulWidget {
 }
 
 class _RankingScreenState extends State<RankingScreen> {
-  String _userInitials = 'JP';
-  String _userName = 'Tú';
+  final _rankingRepo = RankingRepository();
+  final _supabase = Supabase.instance.client;
+
+  late Future<_RankingData> _future;
+  String _userId = '';
 
   @override
   void initState() {
     super.initState();
-    _loadUserInitials();
+    _userId = _supabase.auth.currentUser?.id ?? '';
+    _future = _loadData();
   }
 
-  Future<void> _loadUserInitials() async {
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      if (user == null) return;
+  // ===========================================================================
+  // DATA LOADING
+  // ===========================================================================
 
-      final email = user.email ?? 'usuario@progana.mx';
-      final name = email.split('@').first;
-      _userInitials = name.length >= 2
-          ? name.substring(0, 2).toUpperCase()
-          : name.toUpperCase();
+  Future<_RankingData> _loadData() async {
+    // 1. Cargar ranking general (top 100)
+    final ranking = await _rankingRepo.obtenerRankingGeneral(limit: 100);
 
+    // 2. Si user está en ranking, ya viene en la lista. Si NO está, query separado.
+    RankingEntry? miPosicion;
+    final yaEnTop100 = ranking.any((e) => e.userId == _userId);
+    if (!yaEnTop100 && _userId.isNotEmpty) {
+      miPosicion = await _rankingRepo.obtenerMiPosicionGeneral();
+    }
+
+    // 3. Conteo de quinielas abiertas (CTA estado vacío)
+    int quinielasAbiertas = 0;
+    if (ranking.isEmpty) {
       try {
-        final profile = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', user.id)
-            .maybeSingle();
+        final response = await _supabase
+            .from('quinielas')
+            .select('id')
+            .eq('estado', 'inscripcion');
+        quinielasAbiertas = (response as List).length;
+      } catch (_) {
+        // Si falla query, deja 0 (CTA mostrará mensaje genérico)
+      }
+    }
 
-        if (profile != null) {
-          final fullName = profile['full_name'] as String?;
-          if (fullName != null && fullName.isNotEmpty) {
-            final parts = fullName.split(' ');
-            _userInitials = parts.length >= 2
-                ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
-                : fullName.substring(0, 2).toUpperCase();
-            _userName = 'Tú · ${parts[0]}';
-          }
-        }
-      } catch (_) {}
+    return _RankingData(
+      ranking: ranking,
+      miPosicion: miPosicion,
+      quinielasAbiertas: quinielasAbiertas,
+    );
+  }
 
-      if (mounted) setState(() {});
-    } catch (_) {}
+  Future<void> _handleRefresh() async {
+    setState(() {
+      _future = _loadData();
+    });
+    await _future;
+  }
+
+  void _navigateToQuinielas() {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(builder: (_) => const ListaQuinielasScreen()),
+        )
+        .then((_) {
+      // Recargar al volver (por si user se inscribió)
+      if (mounted) _handleRefresh();
+    });
   }
 
   // ===========================================================================
@@ -85,21 +115,7 @@ class _RankingScreenState extends State<RankingScreen> {
           children: [
             _buildAppBar(),
             _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 16),
-                    _buildDisclaimer(),
-                    const SizedBox(height: 20),
-                    _buildPodio(),
-                    const SizedBox(height: 20),
-                    _buildRankList(),
-                  ],
-                ),
-              ),
-            ),
+            Expanded(child: _buildBody()),
           ],
         ),
       ),
@@ -189,36 +205,207 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   // ===========================================================================
-  // DISCLAIMER (transparencia L41)
+  // BODY — FutureBuilder con 4 estados
   // ===========================================================================
 
-  Widget _buildDisclaimer() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: ProganaColors.gold.withValues(alpha: 0.05),
-          border: Border.all(
-            color: ProganaColors.gold.withValues(alpha: 0.2),
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              color: ProganaColors.gold,
-              size: 14,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
+  Widget _buildBody() {
+    return FutureBuilder<_RankingData>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingState();
+        }
+
+        if (snapshot.hasError) {
+          return _buildErrorState(snapshot.error);
+        }
+
+        final data = snapshot.data;
+        if (data == null || data.ranking.isEmpty) {
+          return _buildEmptyState(data?.quinielasAbiertas ?? 0);
+        }
+
+        return _buildSuccessState(data);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: LOADING
+  // ===========================================================================
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: CircularProgressIndicator(
+        color: ProganaColors.gold,
+        strokeWidth: 3,
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: EMPTY (Opción A.1 — con CTA)
+  // ===========================================================================
+
+  Widget _buildEmptyState(int quinielasAbiertas) {
+    return RefreshIndicator(
+      color: ProganaColors.gold,
+      backgroundColor: ProganaColors.midnight2,
+      onRefresh: _handleRefresh,
+      child: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 40),
+          // Trofeo grande
+          Center(
+            child: Opacity(
+              opacity: 0.3,
               child: Text(
-                'Datos de muestra. El ranking real iniciará el 11 de junio.',
-                style: GoogleFonts.outfit(
-                  color: ProganaColors.cream,
-                  fontSize: 10,
-                  height: 1.4,
+                '🏆',
+                style: GoogleFonts.outfit(fontSize: 64),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Título principal
+          Text(
+            'EL RANKING ARRANCA EL 11 DE JUNIO',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.archivoBlack(
+              color: ProganaColors.cream,
+              fontSize: 14,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Subtítulo
+          Text(
+            'Después del primer partido del Mundial,\naparecerás aquí con tus puntos.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              color: ProganaColors.creamDim,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 32),
+          // Card CTA con conteo
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: ProganaColors.midnight2,
+              border: Border.all(
+                color: ProganaColors.emerald.withValues(alpha: 0.4),
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('📋', style: TextStyle(fontSize: 18)),
+                    const SizedBox(width: 8),
+                    Text(
+                      quinielasAbiertas > 0
+                          ? '$quinielasAbiertas QUINIELA${quinielasAbiertas == 1 ? '' : 'S'} ABIERTA${quinielasAbiertas == 1 ? '' : 'S'}'
+                          : 'INSCRÍBETE A LAS QUINIELAS',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: ProganaColors.emerald,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Inscríbete para competir y aparecer en el ranking real',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    color: ProganaColors.creamDim,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Botón principal
+          ElevatedButton(
+            onPressed: _navigateToQuinielas,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ProganaColors.gold,
+              foregroundColor: ProganaColors.midnight,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              'VER QUINIELAS →',
+              style: GoogleFonts.archivoBlack(
+                color: ProganaColors.midnight,
+                fontSize: 12,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: ERROR
+  // ===========================================================================
+
+  Widget _buildErrorState(Object? error) {
+    final message = error != null
+        ? error.toString().replaceFirst('Exception: ', '')
+        : 'Error desconocido';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('⚠️', style: TextStyle(fontSize: 32)),
+            const SizedBox(height: 12),
+            Text(
+              'ERROR DE CONEXIÓN',
+              style: GoogleFonts.archivoBlack(
+                color: ProganaColors.crimson,
+                fontSize: 13,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                color: ProganaColors.creamDim,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _handleRefresh,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ProganaColors.gold,
+                foregroundColor: ProganaColors.midnight,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: Text(
+                'REINTENTAR',
+                style: GoogleFonts.archivoBlack(
+                  fontSize: 11,
+                  letterSpacing: 1.3,
                 ),
               ),
             ),
@@ -229,10 +416,47 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   // ===========================================================================
-  // PODIO TOP 3
+  // ESTADO: SUCCESS (datos reales)
   // ===========================================================================
 
-  Widget _buildPodio() {
+  Widget _buildSuccessState(_RankingData data) {
+    final ranking = data.ranking;
+    final miPosicion = data.miPosicion;
+
+    // Top 3 → podio
+    final top3 = ranking.take(3).toList();
+
+    // 4-N → lista
+    final resto = ranking.length > 3 ? ranking.skip(3).toList() : <RankingEntry>[];
+
+    return RefreshIndicator(
+      color: ProganaColors.gold,
+      backgroundColor: ProganaColors.midnight2,
+      onRefresh: _handleRefresh,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            // Podio top 3
+            if (top3.isNotEmpty) _buildPodio(top3),
+            const SizedBox(height: 20),
+            // Lista 4-N
+            if (resto.isNotEmpty) _buildRankList(resto),
+            // Tu posición separada (si no estás en top 100)
+            if (miPosicion != null) _buildMiPosicionExtra(miPosicion),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // PODIO TOP 3 (datos reales)
+  // ===========================================================================
+
+  Widget _buildPodio(List<RankingEntry> top3) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -240,23 +464,19 @@ class _RankingScreenState extends State<RankingScreen> {
         children: [
           // 2do (plata)
           Expanded(
-            child: _buildPodiumItem(
-              rank: 2,
-              initials: 'MR',
-              name: 'M. Rodríguez',
-              points: '142',
-              color: const Color(0xFFC0C0C0), // Silver
-              height: 100,
-            ),
+            child: top3.length >= 2
+                ? _buildPodiumItem(
+                    entry: top3[1],
+                    color: const Color(0xFFC0C0C0),
+                    height: 100,
+                  )
+                : const SizedBox.shrink(),
           ),
           const SizedBox(width: 8),
           // 1ro (oro)
           Expanded(
             child: _buildPodiumItem(
-              rank: 1,
-              initials: 'AC',
-              name: 'A. Cruz',
-              points: '156',
+              entry: top3[0],
               color: ProganaColors.gold,
               height: 130,
             ),
@@ -264,14 +484,13 @@ class _RankingScreenState extends State<RankingScreen> {
           const SizedBox(width: 8),
           // 3ro (bronce)
           Expanded(
-            child: _buildPodiumItem(
-              rank: 3,
-              initials: 'LV',
-              name: 'L. Vázquez',
-              points: '138',
-              color: const Color(0xFFCD7F32), // Bronze
-              height: 80,
-            ),
+            child: top3.length >= 3
+                ? _buildPodiumItem(
+                    entry: top3[2],
+                    color: const Color(0xFFCD7F32),
+                    height: 80,
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
@@ -279,10 +498,7 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   Widget _buildPodiumItem({
-    required int rank,
-    required String initials,
-    required String name,
-    required String points,
+    required RankingEntry entry,
     required Color color,
     required double height,
   }) {
@@ -305,7 +521,7 @@ class _RankingScreenState extends State<RankingScreen> {
           ),
           alignment: Alignment.center,
           child: Text(
-            initials,
+            entry.iniciales,
             style: GoogleFonts.archivoBlack(
               color: color,
               fontSize: 16,
@@ -313,7 +529,6 @@ class _RankingScreenState extends State<RankingScreen> {
           ),
         ),
         const SizedBox(height: 6),
-
         // Rank number
         Container(
           width: 24,
@@ -324,7 +539,7 @@ class _RankingScreenState extends State<RankingScreen> {
           ),
           alignment: Alignment.center,
           child: Text(
-            '$rank',
+            '${entry.posicion}',
             style: GoogleFonts.archivoBlack(
               color: ProganaColors.midnight,
               fontSize: 12,
@@ -332,7 +547,6 @@ class _RankingScreenState extends State<RankingScreen> {
           ),
         ),
         const SizedBox(height: 8),
-
         // Block
         Container(
           height: height,
@@ -356,7 +570,7 @@ class _RankingScreenState extends State<RankingScreen> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Text(
-                name,
+                entry.displayName,
                 style: GoogleFonts.outfit(
                   color: ProganaColors.cream,
                   fontSize: 10,
@@ -369,7 +583,7 @@ class _RankingScreenState extends State<RankingScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                '$points PTS',
+                '${entry.puntosDisplay} PTS',
                 style: GoogleFonts.jetBrainsMono(
                   color: color,
                   fontSize: 9,
@@ -385,68 +599,23 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   // ===========================================================================
-  // RANK LIST (4-N) con TU posición destacada
+  // RANK LIST (4-N) con tu posición destacada
   // ===========================================================================
 
-  Widget _buildRankList() {
+  Widget _buildRankList(List<RankingEntry> entries) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
-        children: [
-          _buildRankRow(
-            pos: '04',
-            initials: 'RT',
-            name: 'R. Torres',
-            pts: '132',
-          ),
-          _buildRankRow(
-            pos: '05',
-            initials: 'SG',
-            name: 'S. García',
-            pts: '128',
-          ),
-          _buildRankRow(
-            pos: '06',
-            initials: 'EM',
-            name: 'E. Mendoza',
-            pts: '125',
-          ),
-          // Separador "..."
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              '· · ·',
-              style: GoogleFonts.jetBrainsMono(
-                color: ProganaColors.creamDim,
-                fontSize: 14,
-                letterSpacing: 4,
-              ),
-            ),
-          ),
-          // TU posición destacada
-          _buildRankRow(
-            pos: '147',
-            initials: _userInitials,
-            name: _userName,
-            pts: '0',
-            isMe: true,
-          ),
-          _buildRankRow(
-            pos: '148',
-            initials: 'CM',
-            name: 'C. Méndez',
-            pts: '0',
-          ),
-        ],
+        children: entries.map((entry) {
+          final isMe = entry.userId == _userId;
+          return _buildRankRow(entry: entry, isMe: isMe);
+        }).toList(),
       ),
     );
   }
 
   Widget _buildRankRow({
-    required String pos,
-    required String initials,
-    required String name,
-    required String pts,
+    required RankingEntry entry,
     bool isMe = false,
   }) {
     return Container(
@@ -465,18 +634,16 @@ class _RankingScreenState extends State<RankingScreen> {
       ),
       child: Row(
         children: [
-          // Position
           SizedBox(
             width: 32,
             child: Text(
-              pos,
+              entry.posicion.toString().padLeft(2, '0'),
               style: GoogleFonts.archivoBlack(
                 color: isMe ? ProganaColors.gold : ProganaColors.creamDim,
                 fontSize: 13,
               ),
             ),
           ),
-          // Mini avatar
           Container(
             width: 28,
             height: 28,
@@ -493,7 +660,7 @@ class _RankingScreenState extends State<RankingScreen> {
             ),
             alignment: Alignment.center,
             child: Text(
-              initials,
+              entry.iniciales,
               style: GoogleFonts.archivoBlack(
                 color: isMe ? ProganaColors.gold : ProganaColors.cream,
                 fontSize: 10,
@@ -501,10 +668,11 @@ class _RankingScreenState extends State<RankingScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          // Name
           Expanded(
             child: Text(
-              name,
+              isMe ? 'Tú · ${entry.displayName}' : entry.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
                 color: isMe ? ProganaColors.gold : ProganaColors.cream,
                 fontSize: 12,
@@ -512,9 +680,8 @@ class _RankingScreenState extends State<RankingScreen> {
               ),
             ),
           ),
-          // Points
           Text(
-            pts,
+            entry.puntosDisplay,
             style: GoogleFonts.jetBrainsMono(
               color: isMe ? ProganaColors.gold : ProganaColors.cream,
               fontSize: 13,
@@ -536,4 +703,48 @@ class _RankingScreenState extends State<RankingScreen> {
       ),
     );
   }
+
+  // ===========================================================================
+  // TU POSICIÓN extra (si no estás en top 100)
+  // ===========================================================================
+
+  Widget _buildMiPosicionExtra(RankingEntry miPosicion) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          // Separador
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              '· · ·',
+              style: GoogleFonts.jetBrainsMono(
+                color: ProganaColors.creamDim,
+                fontSize: 14,
+                letterSpacing: 4,
+              ),
+            ),
+          ),
+          // Tu posición destacada
+          _buildRankRow(entry: miPosicion, isMe: true),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// DATA HOLDER
+// =============================================================================
+
+class _RankingData {
+  final List<RankingEntry> ranking;
+  final RankingEntry? miPosicion;
+  final int quinielasAbiertas;
+
+  _RankingData({
+    required this.ranking,
+    this.miPosicion,
+    required this.quinielasAbiertas,
+  });
 }
