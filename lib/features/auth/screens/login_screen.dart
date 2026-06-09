@@ -25,6 +25,11 @@
 //   ✓ Animación entrada: fade + slide-up 800ms
 //   ✓ Tap fuera del input cierra teclado
 //
+// FIX DÍA 10 PM 8 JUN 2026 (Pre-Mundial):
+//   ✓ _navegarAHome → _navegarPostAuth (verifica onboarding flag)
+//   ✓ Nuevos signups verán OnboardingScreen (4 slides) antes de HomeScreen
+//   ✓ Login con cuenta ya completed pasa directo a HomeScreen
+//
 // =============================================================================
 
 import 'package:flutter/material.dart';
@@ -33,6 +38,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/progana_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../home/screens/home_screen.dart';
+import '../../onboarding/repository/onboarding_repository.dart';
+import '../../onboarding/screens/onboarding_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -56,6 +63,9 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscurePassword = true;
 
   final _supabase = Supabase.instance.client;
+
+  // L41 Día 10 PM: Onboarding flow check
+  final _onboardingRepo = OnboardingRepository();
 
   // === ANIMACIONES (nuevo) ===
   late AnimationController _animController;
@@ -118,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen>
         if (response.user != null && mounted) {
           _showMessage(AppConstants.exitoSignup, isError: false);
           if (response.session != null) {
-            _navegarAHome();
+            await _navegarPostAuth();
           }
         }
       } else {
@@ -128,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen>
           password: _passwordController.text,
         );
         if (response.user != null && mounted) {
-          _navegarAHome();
+          await _navegarPostAuth();
         }
       }
     } on AuthException catch (e) {
@@ -140,9 +150,26 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  void _navegarAHome() {
+  /// FIX DÍA 10 PM (8 jun 2026): Verifica si user debe ver onboarding
+  /// antes de ir a HomeScreen.
+  /// 
+  /// - Nuevo signup → onboarding_completed=false → OnboardingScreen
+  /// - User existente (Jorge) → onboarding_completed=true → HomeScreen
+  /// - Error BD (fail-safe) → HomeScreen (no bloquear)
+  Future<void> _navegarPostAuth() async {
+    if (!mounted) return;
+
+    // L41 fail-safe: si falla check, default HomeScreen
+    final debeVerOnboarding = await _onboardingRepo.debeVerOnboarding();
+
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      MaterialPageRoute(
+        builder: (_) => debeVerOnboarding
+            ? const OnboardingScreen()
+            : const HomeScreen(),
+      ),
     );
   }
 
@@ -562,44 +589,3 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 }
-
-// =============================================================================
-// CHECKLIST POST-IMPLEMENTACIÓN
-// =============================================================================
-//
-// ANTES DE EJECUTAR:
-// [ ] Confirmar que progana_theme.dart está en lib/core/theme/
-// [ ] Confirmar que app_constants.dart tiene:
-//     - exitoSignup (String)
-//     - errorGenerico (String)
-//     - minPasswordLength (int = 6)
-// [ ] Confirmar que home_screen.dart existe en lib/features/home/screens/
-// [ ] Confirmar pubspec.yaml tiene:
-//     - google_fonts: ^6.2.1
-//     - supabase_flutter: ^2.5.6
-//
-// PARA EJECUTAR:
-//   flutter clean
-//   flutter pub get
-//   flutter run -d chrome
-//
-// VERIFICACIONES VISUALES:
-// [ ] Fondo midnight con gradiente dorado superior
-// [ ] Logo "PROGANA" cream + "FANTASY" gradient dorado
-// [ ] Card oscura con borde gold sutil
-// [ ] Inputs con icon prefix y borde dorado al focus
-// [ ] Botón "ENTRAR" oro con sombra
-// [ ] Toggle "¿No tienes cuenta? Regístrate" en gold
-// [ ] Animación fade + slide-up al entrar (800ms)
-// [ ] Tap fuera cierra teclado
-//
-// VERIFICACIONES FUNCIONALES:
-// [ ] Login con email existente funciona
-// [ ] Signup crea cuenta nueva
-// [ ] Toggle cambia título y botón
-// [ ] Loading spinner aparece durante auth
-// [ ] AuthException muestra snackbar rojo
-// [ ] Éxito muestra snackbar verde
-// [ ] Navegación a HomeScreen funciona
-//
-// =============================================================================
