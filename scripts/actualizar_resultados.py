@@ -148,13 +148,12 @@ def main():
                 UPDATE partidos
                 SET goles_local = %s,
                     goles_visit = %s,
-                    resultado   = %s,
                     estado      = 'finalizado'
                 WHERE equipo_local_id = %s
                   AND equipo_visit_id = %s
                   AND estado <> 'finalizado';
                 """,
-                (fx["gl"], fx["gv"], resultado, local_id, visit_id),
+                (fx["gl"], fx["gv"], local_id, visit_id),
             )
 
             if cur.rowcount > 0:
