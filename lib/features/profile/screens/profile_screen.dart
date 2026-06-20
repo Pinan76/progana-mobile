@@ -2,13 +2,13 @@
 // PROGANA Fantasy — ProfileScreen (Mi Perfil)
 // =============================================================================
 //
-// L41 COMPLIANT (4 jun 2026 - Día 9):
+// L41 COMPLIANT (17 jun 2026 - Mundial activo):
 //   ✓ Avatar grande con iniciales reales del user
 //   ✓ Nombre + handle (de profile/email)
 //   ✓ Tier badge con corona dorada/emerald según tier real
-//   ✓ Ranking display PLACEHOLDER honesto (sin datos pre-Mundial)
-//   ✓ Stats grid PLACEHOLDER (0/0/0/0 hasta que Mundial empiece)
-//   ✓ Disclaimer "Stats se actualizan en tiempo real durante el Mundial"
+//   ✓ Ranking display REAL (posición + puntos de rankings_general)
+//   ✓ Stats grid REAL (EXACTOS / RESULTADO / CASI / FALLOS desde la BD)
+//   ✓ Defensivo: si falla la consulta, muestra 0 sin romper el perfil
 //   ✓ Botón logout en footer
 //   ✓ Compatible Flutter Web (sin dart:io)
 //
@@ -34,6 +34,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userInitials = 'U';
   String _userTier = 'FREE';
   bool _isLoading = true;
+
+  // Stats reales del Mundial (de rankings_general + puntos_partido)
+  double _puntosTotales = 0;
+  int _posicion = 0;
+  int _exactos = 0;
+  int _resultados = 0;
+  int _casi = 0;
+  int _fallos = 0;
+  bool _tieneStats = false;
 
   @override
   void initState() {
@@ -87,6 +96,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Si profile no existe, usar defaults
       }
 
+      // Cargar stats del ranking (Mundial activo). Defensivo: si falla, quedan en 0.
+      try {
+        final stats = await _supabase
+            .from('rankings_general')
+            .select(
+                'puntos_totales, total_exactos, total_resultado, total_casi, posicion')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        if (stats != null) {
+          _puntosTotales = (stats['puntos_totales'] as num?)?.toDouble() ?? 0;
+          _exactos = (stats['total_exactos'] as num?)?.toInt() ?? 0;
+          _resultados = (stats['total_resultado'] as num?)?.toInt() ?? 0;
+          _casi = (stats['total_casi'] as num?)?.toInt() ?? 0;
+          _posicion = (stats['posicion'] as num?)?.toInt() ?? 0;
+          _tieneStats = true;
+        }
+      } catch (_) {
+        // Sin acceso al ranking aún: stats quedan en 0
+      }
+
+      // Contar fallos (de puntos_partido). Defensivo: si falla, queda en 0.
+      try {
+        final fallosRows = await _supabase
+            .from('puntos_partido')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('tipo_acierto', 'fallo');
+        _fallos = (fallosRows as List).length;
+      } catch (_) {
+        // Sin acceso a puntos_partido: fallos queda en 0
+      }
+
       if (mounted) setState(() => _isLoading = false);
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
@@ -111,6 +153,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     }
+  }
+
+  // Formatea puntos: 10.5 -> "10.5", 7.0 -> "7"
+  String _fmtPuntos(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(1);
   }
 
   // ===========================================================================
@@ -328,10 +376,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ===========================================================================
-  // RANK DISPLAY
+  // RANK DISPLAY — posición + puntos reales
   // ===========================================================================
 
   Widget _buildRankDisplay() {
+    // Si tiene stats: muestra posición real; si no: "—" (pre-Mundial / sin datos)
+    final rankNum = _tieneStats && _posicion > 0 ? '$_posicion' : '—';
+    final subtitle = _tieneStats
+        ? 'Mundial 2026 en curso'
+        : 'Aún sin predicciones registradas';
+    final puntosTxt = _tieneStats ? _fmtPuntos(_puntosTotales) : '0';
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(16),
@@ -359,7 +414,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '—',
+                    rankNum,
                     style: GoogleFonts.archivoBlack(
                       color: ProganaColors.gold,
                       fontSize: 36,
@@ -398,7 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Inicia el 11 de junio',
+                  subtitle,
                   style: GoogleFonts.outfit(
                     color: ProganaColors.creamDim,
                     fontSize: 11,
@@ -413,7 +468,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Column(
             children: [
               Text(
-                '0',
+                puntosTxt,
                 style: GoogleFonts.archivoBlack(
                   color: ProganaColors.cream,
                   fontSize: 22,
@@ -438,7 +493,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ===========================================================================
-  // STATS GRID 2x2
+  // STATS GRID 2x2 — datos reales
   // ===========================================================================
 
   Widget _buildStatsGrid() {
@@ -450,7 +505,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Expanded(
                 child: _buildStatBox(
-                  num: '0',
+                  num: '$_exactos',
                   label: 'EXACTOS',
                   color: ProganaColors.gold,
                 ),
@@ -458,8 +513,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: _buildStatBox(
-                  num: '0',
-                  label: 'CERCA',
+                  num: '$_resultados',
+                  label: 'RESULTADO',
                   color: ProganaColors.emerald,
                 ),
               ),
@@ -470,7 +525,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Expanded(
                 child: _buildStatBox(
-                  num: '0',
+                  num: '$_casi',
                   label: 'CASI',
                   color: ProganaColors.creamDim,
                 ),
@@ -478,7 +533,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: _buildStatBox(
-                  num: '0',
+                  num: '$_fallos',
                   label: 'FALLOS',
                   color: ProganaColors.crimson,
                 ),
@@ -528,10 +583,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ===========================================================================
-  // PLACEHOLDER DISCLAIMER
+  // DISCLAIMER (dinámico según si ya hay stats)
   // ===========================================================================
 
   Widget _buildPlaceholderDisclaimer() {
+    final texto = _tieneStats
+        ? 'Tus estadísticas se actualizan automáticamente conforme avanzan los partidos del Mundial 2026.'
+        : 'Tus estadísticas se actualizarán en tiempo real durante el Mundial 2026.';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
@@ -553,7 +612,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Tus estadísticas se actualizarán en tiempo real durante el Mundial 2026.',
+                texto,
                 style: GoogleFonts.outfit(
                   color: ProganaColors.cream,
                   fontSize: 11,
