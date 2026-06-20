@@ -163,6 +163,13 @@ def main():
             else:
                 no_aplicados.append(fx["home"] + " vs " + fx["away"])
 
+        # Avanzar estados de quinielas segun fechas
+        # (borrador->inscripcion->activa->finalizada). Misma logica que la app,
+        # pero ejecutada aqui con permisos (Postgres directo, sin el 403 del browser).
+        cur.execute("SELECT actualizar_estados_quinielas();")
+        estados = cur.fetchone()
+        print("Estados de quinielas actualizados: " + str(estados[0] if estados else "n/a"))
+
         conn.commit()
         print("\nTransaccion confirmada (commit).")
 
