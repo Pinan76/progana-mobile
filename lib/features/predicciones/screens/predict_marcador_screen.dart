@@ -38,6 +38,12 @@
 //   ✓ Re-edit: carga goleadorPredichoId de predicción existente
 //   ✓ Dialog éxito muestra nombre del goleador si fue seleccionado
 //
+// FIX 16 JUN 2026 (Día 12 — Integración PROGANA Predict IA):
+//   ✓ PredictCard widget integrado entre showcase y selector
+//   ✓ Failsafe L41: si backend no responde, widget invisible (SizedBox.shrink)
+//   ✓ Honestidad: badge ~59% + "IA sugiere, tú decides"
+//   ✓ NO toca lógica existente (tiers, anti-autogol, goleador, submit)
+//
 // FASE 3.1 4 JUN 2026 (Día 9 PM — Anti-autogol L41):
 //   ✓ Regla: goleador debe ser del equipo que anotó >= 1 gol
 //   ✓ UI: jugadores del equipo sin gol aparecen deshabilitados (opacity 0.4)
@@ -55,6 +61,7 @@ import '../../quinielas/models/quiniela.dart';
 import '../../quinielas/models/partido.dart';
 import '../../quinielas/models/jugador.dart';
 import '../../quinielas/repository/jugador_repository.dart';
+import '../../predict/widgets/predict_card.dart';
 import '../models/prediccion.dart';
 import '../repository/prediccion_repository.dart';
 
@@ -760,7 +767,14 @@ class _PredictMarcadorScreenState extends State<PredictMarcadorScreen> {
                 _buildCountdown(),
                 const SizedBox(height: 24),
                 _buildMatchShowcase(),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
+                // 🤖 PROGANA Predict IA (L41 16 jun 2026)
+                // Failsafe: si API caída, widget invisible
+                PredictCard(
+                  home: widget.partido.equipoLocal?.nombre ?? '?',
+                  away: widget.partido.equipoVisit?.nombre ?? '?',
+                ),
+                const SizedBox(height: 8),
                 // Selector condicional según tier
                 if (esFree)
                   _buildLEVSelector()
