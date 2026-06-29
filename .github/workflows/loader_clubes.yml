@@ -1,0 +1,49 @@
+name: Loader Clubes (Motor 2)
+
+# Actualiza resultados + ranking + estados de las ligas de clubes.
+# Va en progana-mobile (repo progana_app), junto a actualizar-resultados.yml.
+# Reusa APIFOOTBALL_KEY (existente) y usa un secret NUEVO dedicado:
+#   SUPABASE_POOLER_URL = session pooler (el que funcionó local, IPv4, soporta CONCURRENTLY)
+# NO toca el secret SUPABASE_DB_URL existente.
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"      # cada 3 horas (UTC)
+  workflow_dispatch: {}
+
+concurrency:
+  group: loader-clubes
+  cancel-in-progress: false
+
+jobs:
+  cargar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install psycopg2-binary
+
+      - name: Liga MX (Apertura)
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}        # existente (reusado)
+          SUPABASE_DB_URL:  ${{ secrets.SUPABASE_POOLER_URL }}    # NUEVO (session pooler)
+        run: python scripts/loader_clubes.py --liga ligamx --season 2026 --round Apertura
+
+      - name: Premier League
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          SUPABASE_DB_URL:  ${{ secrets.SUPABASE_POOLER_URL }}
+        run: python scripts/loader_clubes.py --liga epl --season 2026
+
+      - name: Brasileirão
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          SUPABASE_DB_URL:  ${{ secrets.SUPABASE_POOLER_URL }}
+        run: python scripts/loader_clubes.py --liga brasileirao --season 2026
