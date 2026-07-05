@@ -1,29 +1,23 @@
 name: Actualizar resultados Mundial
-
-# Corre automaticamente cada 2 horas + permite disparo manual
+# Corre automáticamente cada 2 horas + permite disparo manual
 on:
   schedule:
     # Cada 2 horas (en punto). Cron en UTC.
     - cron: "0 */2 * * *"
-  workflow_dispatch: {} # boton "Run workflow" manual en GitHub
-
+  workflow_dispatch: {} # botón "Run workflow" manual en GitHub
 jobs:
   actualizar:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Instalar psycopg2
-        run: pip install psycopg2-binary
-
-      - name: Actualizar resultados en Supabase (Postgres directo)
+      - name: Actualizar resultados en Supabase
         env:
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: python scripts/actualizar_resultados.py
