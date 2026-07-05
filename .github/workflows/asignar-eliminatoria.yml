@@ -1,0 +1,30 @@
+name: Asignar equipos eliminatoria (bracket)
+
+# Lanzamiento MANUAL desde la pestaña Actions. Por defecto DRY-RUN (no escribe).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "1 = simular (default, no escribe) | 0 = aplicar a la BD"
+        required: false
+        default: "1"
+
+jobs:
+  asignar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ejecutar asignador de eliminatoria
+        env:
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python scripts/asignar_equipos_knockout.py
