@@ -48,6 +48,9 @@ import '../../quinielas/screens/detalle_quiniela_screen.dart';
 import '../../tier/screens/tier_upgrade_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../ranking/screens/ranking_screen.dart';
+import '../../quinielas_liga/screens/mis_quinielas_liga_screen.dart';
+import '../../quinielas_liga/screens/unirse_quiniela_screen.dart';
+import '../../quinielas_liga/screens/mis_participaciones_liga_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -558,6 +561,13 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ---- LIGAS (producto principal) ----
+            _buildLigasHeader(),
+            _buildProCard(),
+            _buildParticipoCard(),
+            _buildUnirseCard(),
+            // ---- TORNEO DE SELECCIONES (evento temporal) ----
+            _buildTorneoHeader(),
             _buildNextMatchCard(),
             _buildSectionHeader(),
             _buildQuinielasList(),
@@ -612,6 +622,120 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ENCABEZADOS DE SECCIÓN — Ligas (principal) / Torneo (temporal)
+  // ===========================================================================
+
+  Widget _buildLigasHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: ProganaColors.gold.withValues(alpha: 0.35)),
+              boxShadow: [
+                BoxShadow(
+                  color: ProganaColors.gold.withValues(alpha: 0.15),
+                  blurRadius: 28,
+                  offset: const Offset(0, 0),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: Image.asset(
+                'assets/images/hero.jpg',
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: ProganaColors.gold,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('QUINIELAS DE LIGAS',
+                        style: GoogleFonts.archivoBlack(
+                            color: ProganaColors.cream,
+                            fontSize: 15,
+                            letterSpacing: 0.5)),
+                    const SizedBox(height: 2),
+                    Text('Crea o únete — todo el año',
+                        style: GoogleFonts.outfit(
+                            color: ProganaColors.creamDim, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTorneoHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 26,
+            decoration: BoxDecoration(
+              color: ProganaColors.emerald,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('TORNEO DE SELECCIONES',
+                    style: GoogleFonts.archivoBlack(
+                        color: ProganaColors.cream, fontSize: 13)),
+                const SizedBox(height: 2),
+                Text('Mundial 2026 · en curso',
+                    style: GoogleFonts.outfit(
+                        color: ProganaColors.creamDim, fontSize: 11)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: ProganaColors.emerald.withValues(alpha: 0.15),
+              border: Border.all(color: ProganaColors.emerald),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text('EN VIVO',
+                style: GoogleFonts.jetBrainsMono(
+                    color: ProganaColors.emerald,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2)),
+          ),
+        ],
       ),
     );
   }
@@ -857,6 +981,206 @@ class _HomeScreenState extends State<HomeScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ],
+      ),
+    );
+  }
+
+// ===========================================================================
+  // ACCESO PRO — Crear Quiniela de Clubes (solo tier PRO) — Motor 2
+  // ===========================================================================
+
+  Widget _buildProCard() {
+    if (_userTier != 'PRO') return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.of(context)
+              .push(MaterialPageRoute(
+                  builder: (_) => const MisQuinielasLigaScreen()))
+              .then((_) {
+            if (mounted) _loadData();
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                ProganaColors.gold.withValues(alpha: 0.15),
+                ProganaColors.gold.withValues(alpha: 0.04),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: ProganaColors.gold),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: ProganaColors.gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.add_chart,
+                    color: ProganaColors.gold, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('MIS QUINIELAS DE CLUBES',
+                        style: GoogleFonts.archivoBlack(
+                            color: ProganaColors.cream, fontSize: 13)),
+                    const SizedBox(height: 3),
+                    Text('Crea y gestiona tus quinielas',
+                        style: GoogleFonts.outfit(
+                            color: ProganaColors.creamDim, fontSize: 11)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: ProganaColors.gold, size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // UNIRME CON CÓDIGO — Participar en quiniela de clubes (todos los tiers) — Motor 2
+  // ===========================================================================
+
+  Widget _buildUnirseCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.of(context)
+              .push(MaterialPageRoute(
+                  builder: (_) => const UnirseQuinielaScreen()))
+              .then((_) {
+            if (mounted) _loadData();
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                ProganaColors.emerald.withValues(alpha: 0.15),
+                ProganaColors.emerald.withValues(alpha: 0.04),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: ProganaColors.emerald),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: ProganaColors.emerald.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.group_add,
+                    color: ProganaColors.emerald, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('UNIRME CON CÓDIGO',
+                        style: GoogleFonts.archivoBlack(
+                            color: ProganaColors.cream, fontSize: 13)),
+                    const SizedBox(height: 3),
+                    Text('Entra a la quiniela de un amigo',
+                        style: GoogleFonts.outfit(
+                            color: ProganaColors.creamDim, fontSize: 11)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: ProganaColors.emerald, size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // QUINIELAS DONDE PARTICIPO — lado participante (todos los tiers) — Motor 2
+  // ===========================================================================
+
+  Widget _buildParticipoCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.of(context)
+              .push(MaterialPageRoute(
+                  builder: (_) => const MisParticipacionesLigaScreen()))
+              .then((_) {
+            if (mounted) _loadData();
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                ProganaColors.emerald.withValues(alpha: 0.12),
+                ProganaColors.emerald.withValues(alpha: 0.03),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(
+                color: ProganaColors.emerald.withValues(alpha: 0.6)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: ProganaColors.emerald.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.sports_soccer,
+                    color: ProganaColors.emerald, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('QUINIELAS DONDE PARTICIPO',
+                        style: GoogleFonts.archivoBlack(
+                            color: ProganaColors.cream, fontSize: 13)),
+                    const SizedBox(height: 3),
+                    Text('Las quinielas de clubes a las que te uniste',
+                        style: GoogleFonts.outfit(
+                            color: ProganaColors.creamDim, fontSize: 11)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: ProganaColors.emerald, size: 14),
+            ],
+          ),
+        ),
       ),
     );
   }
