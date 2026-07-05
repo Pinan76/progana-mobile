@@ -119,18 +119,19 @@ def fetch_equipos() -> dict:
     return {r["nombre"]: r["id"] for r in rows}
 
 
-def update_partido(local_id: int, visit_id: int, gl: int, gv: int,
-                   resultado: str) -> list:
+def update_partido(local_id: int, visit_id: int, gl: int, gv: int) -> list:
     params = urllib.parse.urlencode({
         "equipo_local_id": f"eq.{local_id}",
         "equipo_visit_id": f"eq.{visit_id}",
         "estado": "neq.finalizado",
     })
     url = f"{SUPABASE_URL}/rest/v1/partidos?{params}"
+    # OJO: 'resultado' es columna GENERADA (L/E/V se calcula de los goles).
+    # NO se puede setear (da 400: "can only be updated to DEFAULT").
+    # Solo mandamos goles + estado; Postgres computa 'resultado' solo.
     body = {
         "goles_local": gl,
         "goles_visit": gv,
-        "resultado": resultado,
         "estado": "finalizado",
     }
     return http_patch(url, _sb_headers(write=True), body)
@@ -157,14 +158,13 @@ def main() -> int:
         if local_id is None or visit_id is None:
             sin_match_equipo.append(f"{fx['home']} vs {fx['away']}")
             continue
-        resultado = calc_resultado(fx["gl"], fx["gv"])
         try:
-            updated = update_partido(local_id, visit_id, fx["gl"], fx["gv"], resultado)
+            updated = update_partido(local_id, visit_id, fx["gl"], fx["gv"])
         except urllib.error.HTTPError:
             continue
         if updated:
             actualizados += 1
-            print(f"  OK {fx['home']} {fx['gl']}-{fx['gv']} {fx['away']} [{resultado}]")
+            print(f"  OK {fx['home']} {fx['gl']}-{fx['gv']} {fx['away']}")
         else:
             sin_match_partido.append(f"{fx['home']} vs {fx['away']}")
 
