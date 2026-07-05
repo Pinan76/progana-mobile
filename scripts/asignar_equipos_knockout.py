@@ -70,23 +70,33 @@ DRY_RUN = get_env("DRY_RUN", "1") != "0"
 
 def http_get(url: str, headers: dict) -> dict:
     req = urllib.request.Request(url, headers=headers, method="GET")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "ignore")[:400]
+        print(f"HTTP {e.code} en GET {url}\n  Respuesta: {body}", file=sys.stderr)
+        raise
 
 
 def http_patch(url: str, headers: dict, body: dict) -> list:
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="PATCH")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        text = resp.read().decode("utf-8")
-        return json.loads(text) if text else []
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            text = resp.read().decode("utf-8")
+            return json.loads(text) if text else []
+    except urllib.error.HTTPError as e:
+        eb = e.read().decode("utf-8", "ignore")[:400]
+        print(f"HTTP {e.code} en PATCH {url}\n  Respuesta: {eb}", file=sys.stderr)
+        raise
 
 
 def _sb_headers(write: bool = False) -> dict:
-    h = {
-        "apikey": SUPABASE_SECRET_KEY,
-        "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
-    }
+    # Solo 'apikey' con la key nueva sb_secret_. NO mandamos Authorization:Bearer:
+    # las keys sb_secret_ NO son JWT; enviarlas como Bearer hace que PostgREST
+    # intente validarlas como JWT, falle, y responda 403.
+    h = {"apikey": SUPABASE_SECRET_KEY}
     if write:
         h["Content-Type"] = "application/json"
         h["Prefer"] = "return=representation"
