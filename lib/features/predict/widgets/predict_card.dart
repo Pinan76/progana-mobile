@@ -8,16 +8,13 @@
 //   ✓ Endpoint /predictions (cuotas API-Football) vía PredictRepository
 //   ✓ Display español vía NationDisplay (código FIFA → "México")
 //   ✓ FAILSAFE: si Predict no responde → widget invisible (SizedBox.shrink)
-//   ✓ Auto-load en initState
-//   ✓ Loading state sutil (no bloquea UX)
 //   ✓ Honestidad L41: badge ~59% + "IA sugiere, tú decides"
 //
-// Marca PROGANA: precisión real, NUNCA promete 90%.
-//
-// NOMBRES:
-//   - home/away: nombre INGLÉS que entiende el motor (de Equipo.nombre)
-//   - homeCode/awayCode: código FIFA (de Equipo.codigo) para display español
-//   - El motor devuelve pick_team en inglés → se traduce con NationDisplay
+// CANDADO DE TIER (jul 2026):
+//   ✓ Free NUNCA ve el dato → ve tarjeta-candado con CTA a Planes
+//   ✓ Plus/Pro ven el Predict real
+//   ✓ El gate vive DENTRO del widget → protege el Mundial y cualquier uso futuro
+//   ✓ Failsafe: si el tier no se puede determinar → se trata como free (seguro)
 //
 // =============================================================================
 
@@ -26,6 +23,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/progana_theme.dart';
+import '../../../core/services/tier_service.dart';
+import '../../tier/screens/tier_upgrade_screen.dart';
 import '../models/prediction_result.dart';
 import '../repository/predict_repository.dart';
 import '../utils/nation_display.dart';
@@ -59,9 +58,12 @@ class _PredictCardState extends State<PredictCard>
     with SingleTickerProviderStateMixin {
   final _repo = PredictRepository();
 
-  late Future<PredictionResult?> _future;
+  Future<PredictionResult?>? _future;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+
+  bool _gateVerificado = false; // ya sabemos el tier del usuario
+  bool _puedePredict = false; // plus/pro
 
   @override
   void initState() {
@@ -76,7 +78,19 @@ class _PredictCardState extends State<PredictCard>
       curve: Curves.easeOutCubic,
     );
 
-    _future = _loadPrediction();
+    _verificarAcceso();
+  }
+
+  /// Carga el tier ANTES de decidir qué pintar. Solo Plus/Pro cargan la predicción.
+  Future<void> _verificarAcceso() async {
+    await TierService.instance.cargar();
+    if (!mounted) return;
+    final puede = TierService.instance.puedePredict;
+    setState(() {
+      _gateVerificado = true;
+      _puedePredict = puede;
+      if (puede) _future = _loadPrediction();
+    });
   }
 
   @override
@@ -106,7 +120,6 @@ class _PredictCardState extends State<PredictCard>
   /// Traduce el pick_team del motor (inglés) a español.
   /// Prioriza match por código si coincide con home/away.
   String _pickTeamEs(PredictionResult p) {
-    // Si el pick_team coincide con el home, usar homeCode; si con away, awayCode
     final pickEn = p.pickTeam;
     if (_mismoEquipo(pickEn, widget.home) && widget.homeCode != null) {
       return NationDisplay.fromCode(widget.homeCode, fallback: pickEn);
@@ -114,7 +127,6 @@ class _PredictCardState extends State<PredictCard>
     if (_mismoEquipo(pickEn, widget.away) && widget.awayCode != null) {
       return NationDisplay.fromCode(widget.awayCode, fallback: pickEn);
     }
-    // Fallback: traducir por nombre inglés
     return NationDisplay.fromEnglish(pickEn, fallback: pickEn);
   }
 
@@ -128,6 +140,12 @@ class _PredictCardState extends State<PredictCard>
 
   @override
   Widget build(BuildContext context) {
+    // Mientras no sepamos el tier, mostramos el loading sutil (no parpadea a candado).
+    if (!_gateVerificado) return _buildLoadingState();
+
+    // 🔐 Candado: Free NO ve el dato → tarjeta-candado con CTA a Planes.
+    if (!_puedePredict) return _buildLockedCard();
+
     return FutureBuilder<PredictionResult?>(
       future: _future,
       builder: (context, snapshot) {
@@ -145,6 +163,106 @@ class _PredictCardState extends State<PredictCard>
           child: _buildSuccessState(snapshot.data!),
         );
       },
+    );
+  }
+
+  // ===========================================================================
+  // ESTADO: CANDADO (Free) — muestra que Predict EXISTE (no el dato) + CTA
+  // ===========================================================================
+
+  Widget _buildLockedCard() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const TierUpgradeScreen()),
+      ),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: ProganaColors.midnight2,
+          borderRadius: ProganaRadius.card,
+          border: Border.all(color: ProganaColors.gold.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ProganaColors.gold.withValues(alpha: 0.15),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.lock_outline,
+                      color: ProganaColors.gold, size: 14),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'PROGANA PREDICT IA',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: ProganaColors.gold,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.8,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: ProganaColors.emerald.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '~59%',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: ProganaColors.emerald,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'El equipo favorito a ganar y el marcador más probable de cada '
+              'partido — el análisis del jugador serio.',
+              style: GoogleFonts.outfit(
+                color: ProganaColors.creamDim,
+                fontSize: 11,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              height: 38,
+              decoration: BoxDecoration(
+                color: ProganaColors.gold.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: ProganaColors.gold.withValues(alpha: 0.5)),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                'DESBLOQUÉALO CON PLUS  →',
+                style: GoogleFonts.archivoBlack(
+                  color: ProganaColors.gold,
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

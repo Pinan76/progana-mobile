@@ -5,6 +5,8 @@ import '../models/partido_liga.dart';
 import '../repository/quiniela_liga_repository.dart';
 import '../../predict/models/prediction_result.dart';
 import '../../predict/repository/predict_repository.dart';
+import '../../tier/screens/tier_upgrade_screen.dart';
+import '../../../core/services/tier_service.dart';
 import 'panel_liga_screen.dart';
 
 /// Vista de PARTICIPANTE (una participación): predice L/E/V, GUARDA y CONFIRMA.
@@ -50,6 +52,7 @@ class _ParticipanteDetalleLigaScreenState
       _error = null;
     });
     try {
+      await TierService.instance.cargar();
       final ps = await _repo.getPartidosDeQuiniela(_qid);
       Map<int, String> previas = {};
       EstadoPrediccion? est;
@@ -602,6 +605,64 @@ class _ParticipanteDetalleLigaScreenState
     );
   }
 
+  /// Detecta la predicción BASE genérica (sin ratings de club): L≈39% /
+  /// E≈29.5% / V≈31.4%. En ese caso el apoyo no es informativo → se oculta.
+  bool _esBaseline(PredictionResult r) {
+    bool cerca(double a, double b) => (a - b).abs() < 0.005;
+    return cerca(r.localPct, 0.39) &&
+        cerca(r.empatePct, 0.295) &&
+        cerca(r.visitaPct, 0.314);
+  }
+
+  /// Tarjeta-candado para Free: muestra que PROGANA Predict EXISTE (no el dato)
+  /// + CTA que lleva a Planes. Ocultar la feature no convierte; mostrar la puerta
+  /// cerrada sí. El dato real (favorito/marcador) el Free NUNCA lo ve.
+  Widget _predictLockedHint() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const TierUpgradeScreen()),
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(top: ProganaSpacing.sm),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: ProganaColors.gold.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(6),
+          border: Border(
+            left: BorderSide(
+                color: ProganaColors.gold.withValues(alpha: 0.5), width: 2),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline, size: 14, color: ProganaColors.gold),
+            const SizedBox(width: 6),
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  style: ProganaTextStyles.labelSmall
+                      .copyWith(color: ProganaColors.creamDim),
+                  children: [
+                    const TextSpan(text: 'PROGANA Predict · '),
+                    TextSpan(
+                      text: 'Desbloquéalo con Plus',
+                      style: ProganaTextStyles.labelSmall.copyWith(
+                        color: ProganaColors.gold,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: ProganaColors.gold),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Mapea el corto de la competición → clave de liga de la API Predict.
   String? _ligaKey(String corto) {
     switch (corto.toUpperCase()) {
@@ -621,12 +682,14 @@ class _ParticipanteDetalleLigaScreenState
   Widget _predictHint(PartidoLiga p) {
     final liga = _ligaKey(p.competicionCorto);
     if (liga == null) return const SizedBox.shrink();
+    // 🔐 Candado: Free NO ve el dato de Predict — ve la tarjeta-candado con CTA a Plus.
+    if (!TierService.instance.puedePredict) return _predictLockedHint();
     return FutureBuilder<PredictionResult?>(
       future: _predictRepo.obtenerPrediccion(
           home: p.localNombre, away: p.visitanteNombre, league: liga, season: 2026),
       builder: (ctx, snap) {
         final r = snap.data;
-        if (r == null) return const SizedBox.shrink();
+        if (r == null || _esBaseline(r)) return const SizedBox.shrink();
         final pct = (r.confidence * 100).round();
         return Container(
           margin: const EdgeInsets.only(top: ProganaSpacing.sm),
