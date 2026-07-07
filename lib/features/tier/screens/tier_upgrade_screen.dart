@@ -2,18 +2,10 @@
 // PROGANA Fantasy — TierUpgradeScreen (Comparar Planes)
 // =============================================================================
 //
-// L41 COMPLIANT (3 jun 2026 - Día 8 PM):
-//   ✓ 3 cards: Free / Plus / Pro
-//   ✓ Plus tiene ribbon "RECOMENDADO" dorado diagonal (mi recomendación L41)
-//   ✓ Pro sin ribbon, pero con gradient gold+crimson + sombra dorada
-//   ✓ Features alineadas con Reglamento v1.2:
-//     - Free: L/E/V + Ranking público (durante Mundial)
-//     - Plus: Marcador (3pts) + Goleador + Sin pub + IA
-//     - Pro: Todo de Plus + CREAR quinielas privadas + Badge
-//   ✓ Detecta tier actual del user → muestra "PLAN ACTUAL" en card correspondiente
-//   ✓ Botones Upgrade → SnackBar (Stripe pendiente post-demo)
-//   ✓ Compatible Flutter Web (sin dart:io)
-//   ✓ .withValues(alpha:) consistente
+//   ✓ 3 cards: Free / Plus / Pro (Plus con ribbon RECOMENDADO)
+//   ✓ Detecta tier actual → muestra "PLAN ACTUAL"
+//   ✓ COBRO REAL (jul 2026): _handleUpgrade → WebView tokeniza (OpenPay.js) →
+//     crear-suscripcion → aplicar_suscripcion → refresca TierService
 //
 // =============================================================================
 
@@ -21,6 +13,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/progana_theme.dart';
+import '../../../core/services/tier_service.dart';
+import 'openpay_tokenize_screen.dart';
 
 class TierUpgradeScreen extends StatefulWidget {
   const TierUpgradeScreen({super.key});
@@ -32,6 +26,7 @@ class TierUpgradeScreen extends StatefulWidget {
 class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
   String _tierActual = 'free';
   bool _isLoading = true;
+  bool _procesando = false;
 
   @override
   void initState() {
@@ -65,11 +60,58 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
     }
   }
 
-  void _handleUpgrade(String targetTier) {
+  // ===========================================================================
+  // FLUJO DE SUSCRIPCIÓN REAL (WebView tokeniza → crear-suscripcion)
+  // ===========================================================================
+
+  Future<void> _handleUpgrade(String targetTier) async {
+    if (targetTier == 'free') return; // free no tiene pago
+
+    // 1. Tokenizar la tarjeta en el WebView (la tarjeta nunca toca el backend)
+    final tok = await Navigator.of(context).push<OpenpayToken>(
+      MaterialPageRoute(builder: (_) => const OpenpayTokenizeScreen()),
+    );
+    if (tok == null) return; // el usuario canceló
+
+    if (!mounted) return;
+    setState(() => _procesando = true);
+
+    // 2. Crear la suscripción vía Edge Function
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'crear-suscripcion',
+        body: {
+          'plan': targetTier,
+          'token': tok.token,
+          'device_session_id': tok.deviceSessionId,
+        },
+      );
+      final data = res.data is Map ? res.data as Map : const {};
+      if (!mounted) return;
+
+      if (res.status == 200 && data['ok'] == true) {
+        await TierService.instance.cargar(force: true); // refresca el tier
+        setState(() {
+          _tierActual = (data['tier'] as String?) ?? targetTier;
+          _procesando = false;
+        });
+        _snack('¡Listo! Ahora eres ${_tierActual.toUpperCase()}.');
+      } else {
+        setState(() => _procesando = false);
+        _snack('${data['error'] ?? 'No se pudo procesar la suscripción'}');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _procesando = false);
+      _snack('Error de conexión: $e');
+    }
+  }
+
+  void _snack(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Pago disponible próximamente. Estamos en pruebas técnicas.',
+          mensaje,
           style: GoogleFonts.outfit(
             color: ProganaColors.cream,
             fontSize: 13,
@@ -78,9 +120,7 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
         ),
         backgroundColor: ProganaColors.midnight3,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -94,19 +134,35 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
     return Scaffold(
       backgroundColor: ProganaColors.midnight,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            _buildAppBar(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: ProganaColors.gold,
-                        strokeWidth: 3,
-                      ),
-                    )
-                  : _buildContent(),
+            Column(
+              children: [
+                _buildAppBar(),
+                Expanded(
+                  child: _isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: ProganaColors.gold,
+                            strokeWidth: 3,
+                          ),
+                        )
+                      : _buildContent(),
+                ),
+              ],
             ),
+            if (_procesando)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: ProganaColors.gold,
+                      strokeWidth: 3,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -173,32 +229,19 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Título principal
           _buildHero(),
           const SizedBox(height: 32),
-
-          // Card Free
           _buildFreeCard(),
           const SizedBox(height: 12),
-
-          // Card Plus (con ribbon RECOMENDADO)
           _buildPlusCard(),
           const SizedBox(height: 12),
-
-          // Card Pro
           _buildProCard(),
           const SizedBox(height: 24),
-
-          // Footer disclaimer
           _buildFooterDisclaimer(),
         ],
       ),
     );
   }
-
-  // ===========================================================================
-  // HERO
-  // ===========================================================================
 
   Widget _buildHero() {
     return Column(
@@ -257,7 +300,6 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Text(
             'FREE',
             style: GoogleFonts.archivoBlack(
@@ -269,14 +311,10 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
           const SizedBox(height: 4),
           _buildPrice(currency: '\$', amount: '0', period: '/ mes'),
           const SizedBox(height: 14),
-
-          // Features
           _buildFeature('Predicción L / E / V', isGold: false),
           _buildFeature('Ranking público del Mundial', isGold: false),
-          _buildFeature('Gratis durante Mundial 2026', isGold: false),
+          _buildFeature('Participa por invitación', isGold: false),
           const SizedBox(height: 14),
-
-          // Button
           _buildTierButton(
             label: isActual ? 'PLAN ACTUAL' : 'PLAN GRATIS',
             isActual: isActual,
@@ -329,7 +367,7 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
               _buildFeature('Predicción goleador (+1 pt)', isGold: false),
               _buildFeature('Sin publicidad', isGold: false),
               _buildFeature('PROGANA Predict (IA)', isGold: false),
-              _buildFeature('Acceso oficial post-Mundial', isGold: false),
+              _buildFeature('Predict libre: cualquier partido', isGold: false),
               const SizedBox(height: 14),
               _buildTierButton(
                 label: isActual ? 'PLAN ACTUAL' : 'SUBIR A PLUS',
@@ -340,16 +378,14 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
             ],
           ),
         ),
-
-        // Ribbon RECOMENDADO diagonal (Plus)
         Positioned(
           top: 12,
           right: -28,
           child: Transform.rotate(
-            angle: 0.785, // 45°
+            angle: 0.785,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 30, vertical: 3),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 30, vertical: 3),
               color: ProganaColors.gold,
               child: Text(
                 'RECOMENDADO',
@@ -413,7 +449,7 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
           _buildFeature('CREAR quinielas privadas', isGold: true, icon: '★'),
           _buildFeature('Para grupos cerrados (peñas, oficinas)',
               isGold: true, icon: '★'),
-          _buildFeature('Modelo "Polla Mexicana"',
+          _buildFeature('Conservas tu comisión completa',
               isGold: true, icon: '★'),
           _buildFeature('Badge Pro distintivo', isGold: true, icon: '★'),
           const SizedBox(height: 14),
@@ -518,7 +554,6 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
     BoxShadow? shadow;
 
     if (isActual) {
-      // Plan actual: estilo "selected"
       switch (type) {
         case TierBtnType.free:
           bg = Colors.transparent;
@@ -537,7 +572,6 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
           break;
       }
     } else {
-      // No es actual: estilo "call to action"
       switch (type) {
         case TierBtnType.free:
           bg = Colors.transparent;
@@ -574,9 +608,8 @@ class _TierUpgradeScreenState extends State<TierUpgradeScreen> {
           height: 42,
           decoration: BoxDecoration(
             color: bg,
-            border: borderColor != null
-                ? Border.all(color: borderColor)
-                : null,
+            border:
+                borderColor != null ? Border.all(color: borderColor) : null,
             borderRadius: BorderRadius.circular(8),
             boxShadow: shadow != null ? [shadow] : null,
           ),

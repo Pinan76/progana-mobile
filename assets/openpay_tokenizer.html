@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <!-- OpenPay.js: tokeniza la tarjeta con la llave PÚBLICA. La tarjeta viaja
+       cifrada a OpenPay; NUNCA pasa por el backend de PROGANA. -->
+  <script type="text/javascript" src="https://openpay.s3.amazonaws.com/openpay.v1.min.js"></script>
+  <script type="text/javascript" src="https://openpay.s3.amazonaws.com/openpay-data.v1.min.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; padding: 18px;
+      background: #0A0E1A; color: #F5F0E8;
+      font-family: -apple-system, Roboto, Arial, sans-serif;
+    }
+    h2 { font-size: 15px; letter-spacing: .5px; margin: 4px 0 16px; color: #D4AF37; }
+    label { display:block; font-size: 11px; color: #9aa0ad; margin: 12px 0 4px; letter-spacing:.5px; }
+    input {
+      width: 100%; padding: 13px 12px; font-size: 16px;
+      background: #131826; color: #F5F0E8;
+      border: 1px solid #2a3145; border-radius: 8px; outline: none;
+    }
+    input:focus { border-color: #D4AF37; }
+    .row { display: flex; gap: 10px; }
+    .row > div { flex: 1; }
+    #error { color: #DC2626; font-size: 13px; min-height: 18px; margin-top: 10px; }
+    button {
+      width: 100%; margin-top: 18px; padding: 15px;
+      font-size: 15px; font-weight: 700; letter-spacing: .8px;
+      color: #0A0E1A; background: #D4AF37;
+      border: none; border-radius: 10px;
+    }
+    button:disabled { opacity: .5; }
+    .secure { margin-top: 14px; font-size: 11px; color: #9aa0ad; text-align: center; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h2>DATOS DE TARJETA</h2>
+
+  <label>Nombre del titular</label>
+  <input id="holder" placeholder="Como aparece en la tarjeta" autocomplete="cc-name" />
+
+  <label>Número de tarjeta</label>
+  <input id="number" placeholder="4111 1111 1111 1111" inputmode="numeric" autocomplete="cc-number" />
+
+  <div class="row">
+    <div>
+      <label>Mes (MM)</label>
+      <input id="month" placeholder="12" maxlength="2" inputmode="numeric" />
+    </div>
+    <div>
+      <label>Año (AA)</label>
+      <input id="year" placeholder="30" maxlength="2" inputmode="numeric" />
+    </div>
+    <div>
+      <label>CVV</label>
+      <input id="cvv" placeholder="123" maxlength="4" inputmode="numeric" autocomplete="cc-csc" />
+    </div>
+  </div>
+
+  <div id="error"></div>
+  <button id="pay">SUSCRIBIRME</button>
+  <p class="secure">🔒 Tus datos se cifran y viajan directo a OpenPay.<br/>PROGANA nunca los ve ni los almacena.</p>
+
+  <script>
+    // Config inyectada por Flutter (reemplazo de placeholders antes de cargar)
+    OpenPay.setId('__MERCHANT_ID__');
+    OpenPay.setApiKey('__PUBLIC_KEY__');
+    OpenPay.setSandboxMode(__SANDBOX__);
+
+    // Antifraude: genera el device_session_id (requerido por OpenPay)
+    var deviceSessionId = OpenPay.deviceData.setup();
+
+    function post(obj) {
+      if (window.FlutterOpenpay) {
+        FlutterOpenpay.postMessage(JSON.stringify(obj));
+      }
+    }
+
+    document.getElementById('pay').addEventListener('click', function () {
+      var btn = this;
+      var err = document.getElementById('error');
+      err.textContent = '';
+      btn.disabled = true; btn.textContent = 'PROCESANDO…';
+
+      OpenPay.token.create({
+        card_number: document.getElementById('number').value.replace(/\s/g, ''),
+        holder_name: document.getElementById('holder').value.trim(),
+        expiration_year: document.getElementById('year').value.trim(),
+        expiration_month: document.getElementById('month').value.trim(),
+        cvv2: document.getElementById('cvv').value.trim()
+      },
+      function (res) {
+        // Éxito: mandamos SOLO el token + device_session_id a Flutter
+        post({ token: res.data.id, device_session_id: deviceSessionId });
+      },
+      function (error) {
+        btn.disabled = false; btn.textContent = 'SUSCRIBIRME';
+        var msg = (error && error.data && error.data.description)
+          ? error.data.description : 'Tarjeta inválida. Revisa los datos.';
+        err.textContent = msg;
+      });
+    });
+  </script>
+</body>
+</html>
