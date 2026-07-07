@@ -1,13 +1,16 @@
 name: Asignar equipos eliminatoria (bracket)
 
-# Lanzamiento MANUAL desde la pestaña Actions. Por defecto DRY-RUN (no escribe).
+# Automático cada HORA (aplica solo) + disparo manual (también aplica por defecto).
 on:
+  schedule:
+    # Cada hora, 15 min pasada (después de "Actualizar resultados"). Cron en UTC.
+    - cron: "15 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "1 = simular (default, no escribe) | 0 = aplicar a la BD"
+        description: "0 = aplicar (default) | 1 = solo simular"
         required: false
-        default: "1"
+        default: "0"
 
 jobs:
   asignar:
@@ -26,5 +29,6 @@ jobs:
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          # Manual: usa el input (default 0 = aplicar). Programado: sin input -> 0.
+          DRY_RUN: ${{ github.event.inputs.dry_run || '0' }}
         run: python scripts/asignar_equipos_knockout.py
