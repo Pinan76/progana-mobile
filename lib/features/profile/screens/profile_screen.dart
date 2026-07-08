@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/progana_theme.dart';
+import '../widgets/eliminar_cuenta.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -200,6 +201,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildPlaceholderDisclaimer(),
                 const SizedBox(height: 24),
                 _buildLogoutButton(),
+                const SizedBox(height: 12),
+                _buildDeleteAccountButton(),
                 const SizedBox(height: 24),
               ],
             ),
@@ -665,6 +668,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ELIMINAR CUENTA (requisito Google Play)
+  // ===========================================================================
+
+  Widget _buildDeleteAccountButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: TextButton.icon(
+        onPressed: () => mostrarDialogoEliminarCuenta(context),
+        icon: const Icon(Icons.delete_forever_outlined,
+            color: ProganaColors.creamDim, size: 16),
+        label: Text(
+          'Eliminar mi cuenta',
+          style: GoogleFonts.outfit(
+            color: ProganaColors.creamDim,
+            fontSize: 12,
+            decoration: TextDecoration.underline,
           ),
         ),
       ),
