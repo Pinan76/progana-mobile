@@ -1,0 +1,31 @@
+name: Transicionar estados de quinielas
+
+# Abre/cierra/finaliza quinielas por tiempo, aunque nadie abra la app.
+# Cada 15 min (Supabase RPC, sin API externa → barato).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  transicionar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar RPC actualizar_estados_quinielas
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          echo "Transicionando estados de quinielas..."
+          RESP=$(curl -s -w "\n%{http_code}" -X POST \
+            "$SUPABASE_URL/rest/v1/rpc/actualizar_estados_quinielas" \
+            -H "apikey: $SUPABASE_SECRET_KEY" \
+            -H "Content-Type: application/json")
+          BODY=$(echo "$RESP" | head -n -1)
+          CODE=$(echo "$RESP" | tail -n 1)
+          echo "HTTP $CODE"
+          echo "Respuesta: $BODY"
+          if [ "$CODE" != "200" ]; then
+            echo "::error::La RPC devolvió $CODE (esperado 200)"
+            exit 1
+          fi
