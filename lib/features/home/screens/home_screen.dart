@@ -79,6 +79,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _errorMessage;
   int _currentNavIndex = 0;
 
+  // Mundial archivado: false = oculto (revivir para Copa Oro/America)
+  final bool _mostrarMundial = false;
+
   // === COUNTDOWN ===
   Timer? _countdownTimer;
   Duration? _timeRemaining;
@@ -87,8 +90,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _cargarProximoPartido();
-    _startCountdown();
+    if (_mostrarMundial) {
+      _cargarProximoPartido();
+      _startCountdown();
+    }
   }
 
   @override
@@ -306,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _handleRefresh() async {
     await _loadData();
-    await _cargarProximoPartido();
+    if (_mostrarMundial) await _cargarProximoPartido();
   }
 
   void _navigateToQuinielas() {
@@ -344,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Widget? destination;
     switch (index) {
       case 1:
-        destination = const ListaQuinielasScreen();
+        destination = const MisParticipacionesLigaScreen();
         break;
       case 2:
         destination = const RankingScreen();
@@ -566,11 +571,14 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildProCard(),
             _buildParticipoCard(),
             _buildUnirseCard(),
-            // ---- TORNEO DE SELECCIONES (evento temporal) ----
-            _buildTorneoHeader(),
-            _buildNextMatchCard(),
-            _buildSectionHeader(),
-            _buildQuinielasList(),
+            // ---- TORNEO DE SELECCIONES (archivado; revivir con _mostrarMundial) ----
+            if (_mostrarMundial) ...[
+              _buildTorneoHeader(),
+              _buildNextMatchCard(),
+              _buildSectionHeader(),
+              _buildQuinielasList(),
+            ] else
+              _buildTorneoProximamente(),
             const SizedBox(height: 24),
           ],
         ),
@@ -689,6 +697,67 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TORNEO DE SELECCIONES - Archivado (revivir para Copa Oro / Copa America)
+  // ===========================================================================
+
+  Widget _buildTorneoProximamente() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: ProganaColors.midnight2,
+          border: Border.all(color: ProganaColors.emerald.withValues(alpha: 0.25)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: ProganaColors.emerald.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.emoji_events_outlined,
+                  color: ProganaColors.emerald, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('TORNEO DE SELECCIONES',
+                      style: GoogleFonts.archivoBlack(
+                          color: ProganaColors.cream, fontSize: 13)),
+                  const SizedBox(height: 3),
+                  Text('Proximamente: UEFA Nations League - arranca 24 sep 2026',
+                      style: GoogleFonts.outfit(
+                          color: ProganaColors.creamDim, fontSize: 11)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: ProganaColors.emerald.withValues(alpha: 0.12),
+                border: Border.all(color: ProganaColors.emerald.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('PRONTO',
+                  style: GoogleFonts.jetBrainsMono(
+                      color: ProganaColors.emerald,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2)),
+            ),
+          ],
+        ),
       ),
     );
   }

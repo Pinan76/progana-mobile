@@ -36,6 +36,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userTier = 'FREE';
   bool _isLoading = true;
 
+  // Stats del Mundial ocultas (revivir/reemplazar por stats de Ligas)
+  final bool _mostrarStatsMundial = false;
+
   // Stats reales del Mundial (de rankings_general + puntos_partido)
   double _puntosTotales = 0;
   int _posicion = 0;
@@ -194,12 +197,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 _buildHero(),
                 const SizedBox(height: 24),
-                _buildRankDisplay(),
-                const SizedBox(height: 16),
-                _buildStatsGrid(),
-                const SizedBox(height: 16),
-                _buildPlaceholderDisclaimer(),
-                const SizedBox(height: 24),
+                if (_mostrarStatsMundial) ...[
+                  _buildRankDisplay(),
+                  const SizedBox(height: 16),
+                  _buildStatsGrid(),
+                  const SizedBox(height: 16),
+                  _buildPlaceholderDisclaimer(),
+                  const SizedBox(height: 24),
+                ],
                 _buildLogoutButton(),
                 const SizedBox(height: 12),
                 _buildDeleteAccountButton(),

@@ -354,7 +354,7 @@ class _PanelLigaScreenState extends State<PanelLigaScreen> {
     }
 
     const wName = 104.0;
-    const wCell = 36.0;
+    const wCell = 38.0; // 36 celda + 2 margen del pick: alinea header/resultado con picks
 
     Widget headerCell(String t, double w, {Color? color}) => Container(
           width: w,
@@ -375,7 +375,7 @@ class _PanelLigaScreenState extends State<PanelLigaScreen> {
           // Header: nombres de columnas (número de partido)
           Row(
             children: [
-              headerCell('Participante', wName),
+              headerCell('', wName),
               ...columnas.asMap().entries.map(
                   (e) => headerCell('${e.key + 1}', wCell)),
             ],
