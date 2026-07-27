@@ -48,3 +48,5 @@ app.*.map.json
 *.bak
 *.bak2
 *.bak3
+
+*.bakr
