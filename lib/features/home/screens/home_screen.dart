@@ -47,7 +47,6 @@ import '../../quinielas/screens/lista_quinielas_screen.dart';
 import '../../quinielas/screens/detalle_quiniela_screen.dart';
 import '../../tier/screens/tier_upgrade_screen.dart';
 import '../../profile/screens/profile_screen.dart';
-import '../../ranking/screens/ranking_screen.dart';
 import '../../quinielas_liga/screens/mis_quinielas_liga_screen.dart';
 import '../../quinielas_liga/screens/unirse_quiniela_screen.dart';
 import '../../quinielas_liga/screens/mis_participaciones_liga_screen.dart';
@@ -352,9 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
         destination = const MisParticipacionesLigaScreen();
         break;
       case 2:
-        destination = const RankingScreen();
-        break;
-      case 3:
         destination = const ProfileScreen();
         break;
     }
@@ -1491,8 +1487,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildNavItem(0, Icons.home_outlined, 'HOME'),
               _buildNavItem(1, Icons.grid_view_outlined, 'QUINIELAS'),
-              _buildNavItem(2, Icons.leaderboard_outlined, 'RANKING'),
-              _buildNavItem(3, Icons.person_outline, 'PERFIL'),
+              _buildNavItem(2, Icons.person_outline, 'PERFIL'),
             ],
           ),
         ),
