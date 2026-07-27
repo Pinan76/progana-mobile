@@ -132,16 +132,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 20),
-
-                    // ===== BANDERAS HOST =====
-                    FadeTransition(
-                      opacity: _trophyController,
-                      child: const Text(
-                        '🇲🇽 🇺🇸 🇨🇦',
-                        style: TextStyle(fontSize: 28),
-                      ),
-                    ),
+                    
 
                     const Spacer(flex: 2),
 
@@ -256,7 +247,7 @@ class _SplashScreenState extends State<SplashScreen>
         ),
         const SizedBox(width: 12),
         Text(
-          'MUNDIAL 2026',
+          'QUINIELAS DE LIGAS',
           style: ProganaTextStyles.labelLarge.copyWith(fontSize: 10),
         ),
         const SizedBox(width: 12),
