@@ -56,8 +56,13 @@ jobs:
                 issuer_id: ENV["ASC_ISSUER_ID"],
                 key_filepath: ENV["ASC_KEY_PATH"]
               )
-              # Certificado de DISTRIBUCION + perfil App Store (vía API Key)
-              cert(api_key: key)
+              kc = File.expand_path("~/Library/Keychains/fastlane_tmp_keychain-db")
+              # Certificado de DISTRIBUCION + perfil App Store (via API Key), en la keychain temporal de CI
+              cert(
+                api_key: key,
+                keychain_path: kc,
+                keychain_password: ""
+              )
               sigh(api_key: key, app_identifier: ENV["BUNDLE_ID"], force: true)
               profile = lane_context[SharedValues::SIGH_NAME]
               update_code_signing_settings(
