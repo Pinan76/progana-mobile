@@ -1,4 +1,8 @@
-name: iOS Release (firmar + TestFlight)
+name: iOS Release (match + TestFlight)
+
+# Firma con fastlane match (certs cifrados en repo privado Pinan76-progana-certs)
+# y sube a TestFlight. match REUSA los certs (no crea nuevos -> no choca con limites).
+# Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_API_KEY, MATCH_PASSWORD, MATCH_GIT_TOKEN
 
 on:
   workflow_dispatch: {}
@@ -15,8 +19,11 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}
       TEAM_ID: "852RTXZJW4"
       BUNDLE_ID: "mx.progana.proganaApp"
+      CERTS_REPO: "Pinan76/Pinan76-progana-certs"
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -43,7 +50,7 @@ jobs:
         run: |
           printf '%s' "$ASC_API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
           echo "ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
-      - name: Crear Fastfile (firma manual de distribución)
+      - name: Crear Fastfile (match)
         run: |
           mkdir -p ios/fastlane
           cat > ios/fastlane/Fastfile <<'RUBY'
@@ -56,15 +63,17 @@ jobs:
                 issuer_id: ENV["ASC_ISSUER_ID"],
                 key_filepath: ENV["ASC_KEY_PATH"]
               )
-              kc = File.expand_path("~/Library/Keychains/fastlane_tmp_keychain-db")
-              # Certificado de DISTRIBUCION + perfil App Store (via API Key), en la keychain temporal de CI
-              cert(
+              git_url = "https://x-access-token:#{ENV['MATCH_GIT_TOKEN']}@github.com/#{ENV['CERTS_REPO']}.git"
+              match(
+                type: "appstore",
+                app_identifier: ENV["BUNDLE_ID"],
+                git_url: git_url,
+                git_basic_authorization: nil,
                 api_key: key,
-                keychain_path: kc,
-                keychain_password: ""
+                readonly: false
               )
-              sigh(api_key: key, app_identifier: ENV["BUNDLE_ID"], force: true)
-              profile = lane_context[SharedValues::SIGH_NAME]
+              profile = ENV["sigh_#{ENV['BUNDLE_ID']}_appstore_profile-name"] \
+                        || "match AppStore #{ENV['BUNDLE_ID']}"
               update_code_signing_settings(
                 use_automatic_signing: false,
                 path: "Runner.xcodeproj",
@@ -93,8 +102,8 @@ jobs:
             end
           end
           RUBY
-          echo "Fastfile (manual) creado"
-      - name: Firmar + subir a TestFlight
+          echo "Fastfile (match) creado"
+      - name: match + firmar + subir a TestFlight
         working-directory: ios
         run: fastlane beta
       - name: Guardar IPA (artefacto)
