@@ -1,0 +1,95 @@
+name: iOS Release (firmar + TestFlight)
+
+# Fase 2: compila, FIRMA con la API Key de App Store Connect y sube a TestFlight.
+# Secrets requeridos: ASC_KEY_ID, ASC_ISSUER_ID, ASC_API_KEY (contenido del .p8).
+# Team ID y bundle id van en claro (no son secretos).
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [feature/midnight-stadium-theme]
+    paths:
+      - '.github/workflows/ios-release.yml'
+
+jobs:
+  release-ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+      TEAM_ID: "852RTXZJW4"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Generar carpeta iOS si falta
+        run: |
+          if [ ! -d ios ]; then
+            flutter create --platforms=ios --org mx.progana --project-name progana_app .
+          fi
+
+      - name: Config Info.plist (nombre + compliance cifrado)
+        run: |
+          PL=ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName PROGANA Fantasy" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string PROGANA Fantasy" "$PL"
+          /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PL"
+          echo "--- Info.plist (claves clave) ---"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PL"
+          /usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PL"
+
+      - name: Preparar proyecto (xcconfig + pods)
+        run: flutter build ios --release --no-codesign
+
+      - name: Crear Fastfile
+        run: |
+          mkdir -p ios/fastlane
+          cat > ios/fastlane/Fastfile <<'RUBY'
+          default_platform(:ios)
+          platform :ios do
+            lane :beta do
+              key = app_store_connect_api_key(
+                key_id: ENV["ASC_KEY_ID"],
+                issuer_id: ENV["ASC_ISSUER_ID"],
+                key_content: ENV["ASC_API_KEY"],
+                is_key_content_base64: false
+              )
+              build_app(
+                workspace: "Runner.xcworkspace",
+                scheme: "Runner",
+                configuration: "Release",
+                export_method: "app-store",
+                xcargs: "-allowProvisioningUpdates DEVELOPMENT_TEAM=#{ENV['TEAM_ID']} CODE_SIGN_STYLE=Automatic",
+                output_directory: "../build/ipa",
+                clean: true
+              )
+              upload_to_testflight(
+                api_key: key,
+                skip_waiting_for_build_processing: true
+              )
+            end
+          end
+          RUBY
+          echo "Fastfile creado"
+
+      - name: Firmar + subir a TestFlight
+        working-directory: ios
+        run: fastlane beta
+
+      - name: Guardar IPA (artefacto)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: progana-ipa
+          path: build/ipa/*.ipa
+          if-no-files-found: warn
