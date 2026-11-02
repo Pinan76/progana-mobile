@@ -1,9 +1,5 @@
 name: iOS Release (firmar + TestFlight)
 
-# Fase 2: compila, FIRMA con la API Key de App Store Connect y sube a TestFlight.
-# Secrets requeridos: ASC_KEY_ID, ASC_ISSUER_ID, ASC_API_KEY (contenido del .p8).
-# Team ID y bundle id van en claro (no son secretos).
-
 on:
   workflow_dispatch: {}
   push:
@@ -40,16 +36,19 @@ jobs:
       - name: Config Info.plist (nombre + compliance cifrado)
         run: |
           PL=ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName PROGANA Fantasy" "$PL" \
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName PROGANA Fantasy" "$PL" 2>/dev/null \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string PROGANA Fantasy" "$PL"
-          /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PL" \
-            || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PL"
-          echo "--- Info.plist (claves clave) ---"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PL"
-          /usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PL" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PL"
 
       - name: Preparar proyecto (xcconfig + pods)
         run: flutter build ios --release --no-codesign
+
+      - name: Guardar la API Key como archivo .p8
+        run: |
+          printf '%s' "$ASC_API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "p8 guardado ($(wc -c < "$RUNNER_TEMP/AuthKey.p8") bytes)"
 
       - name: Crear Fastfile
         run: |
@@ -61,17 +60,21 @@ jobs:
               key = app_store_connect_api_key(
                 key_id: ENV["ASC_KEY_ID"],
                 issuer_id: ENV["ASC_ISSUER_ID"],
-                key_content: ENV["ASC_API_KEY"],
-                is_key_content_base64: false
+                key_filepath: ENV["ASC_KEY_PATH"]
               )
               build_app(
                 workspace: "Runner.xcworkspace",
                 scheme: "Runner",
                 configuration: "Release",
                 export_method: "app-store",
-                xcargs: "-allowProvisioningUpdates DEVELOPMENT_TEAM=#{ENV['TEAM_ID']} CODE_SIGN_STYLE=Automatic",
                 output_directory: "../build/ipa",
-                clean: true
+                clean: true,
+                xcargs: "-allowProvisioningUpdates " \
+                        "-authenticationKeyPath #{ENV['ASC_KEY_PATH']} " \
+                        "-authenticationKeyID #{ENV['ASC_KEY_ID']} " \
+                        "-authenticationKeyIssuerID #{ENV['ASC_ISSUER_ID']} " \
+                        "DEVELOPMENT_TEAM=#{ENV['TEAM_ID']} " \
+                        "CODE_SIGN_STYLE=Automatic"
               )
               upload_to_testflight(
                 api_key: key,
