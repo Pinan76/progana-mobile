@@ -1,0 +1,61 @@
+name: iOS Build (compile check)
+
+# Compila PROGANA para iOS en una Mac de GitHub (sin firma).
+# Objetivo Fase 1: verificar que la app COMPILE para iOS y descubrir que arreglos faltan.
+# La firma/TestFlight (Fase 2) requiere cuenta Apple Developer + certificados.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [feature/midnight-stadium-theme]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/ios-build.yml'
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Generar carpeta iOS si falta
+        run: |
+          if [ ! -d ios ]; then
+            echo "::notice::No existe ios/ -> generando scaffold iOS"
+            flutter create --platforms=ios --org mx.progana --project-name progana_app .
+          else
+            echo "ios/ ya existe, no se regenera"
+          fi
+
+      - name: Analyze (no bloqueante)
+        run: flutter analyze || true
+
+      - name: Build iOS (release, SIN firma)
+        run: flutter build ios --release --no-codesign
+
+      - name: Tamano del .app
+        if: always()
+        run: du -sh build/ios/iphoneos/Runner.app 2>/dev/null || echo "Runner.app no encontrado"
+
+      - name: Subir .app (artefacto)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: progana-ios-unsigned
+          path: build/ios/iphoneos/Runner.app
+          if-no-files-found: warn
