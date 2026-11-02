@@ -37,6 +37,8 @@ jobs:
           if [ ! -d ios ]; then
             flutter create --platforms=ios --org mx.progana --project-name progana_app .
           fi
+      - name: Generar icono de la app (iOS + Android)
+        run: dart run flutter_launcher_icons
       - name: Config Info.plist (nombre + compliance cifrado)
         run: |
           PL=ios/Runner/Info.plist
